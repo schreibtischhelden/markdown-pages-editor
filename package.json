@@ -1,0 +1,45 @@
+{
+	"name": "@schreibtischhelden/markdown-pages-editor",
+	"version": "1.0.0",
+	"description": "Lightweight, configurable Markdown editor for the browser: textarea, toolbar and a live preview rendered by your own Markdown pipeline. No dependencies.",
+	"keywords": [
+		"markdown",
+		"editor",
+		"markdown-pages-editor",
+		"textarea",
+		"preview"
+	],
+	"homepage": "https://github.com/schreibtischhelden/markdown-pages-editor#readme",
+	"bugs": "https://github.com/schreibtischhelden/markdown-pages-editor/issues",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/schreibtischhelden/markdown-pages-editor.git"
+	},
+	"license": "MIT",
+	"author": "Tobias Fichtner",
+	"main": "./markdown-pages-editor.js",
+	"types": "./index.d.ts",
+	"style": "./markdown-pages-editor.css",
+	"exports": {
+		".": {
+			"types": "./index.d.ts",
+			"import": "./index.mjs",
+			"require": "./markdown-pages-editor.js"
+		},
+		"./markdown-pages-editor.css": "./markdown-pages-editor.css",
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"markdown-pages-editor.js",
+		"markdown-pages-editor.css",
+		"index.mjs",
+		"index.d.ts"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"test": "node --test",
+		"release-notes": "node scripts/release-notes.mjs"
+	}
+}
