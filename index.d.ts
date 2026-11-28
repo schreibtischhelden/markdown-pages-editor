@@ -35,6 +35,8 @@ export interface EditorOptions {
 	commands?: Record<string, Command>;
 	/** Keyboard shortcuts of the commands in the toolbar, default true. */
 	shortcuts?: boolean;
+	/** Mode buttons as icons (label as tooltip), default true. */
+	modeIcons?: boolean;
 	/**
 	 * Renders the preview: return HTML (inserted as is - sanitize it!) or fill
 	 * the element yourself and return nothing. Without it there is no preview.
@@ -53,7 +55,7 @@ export interface EditorOptions {
 	/** false hides the download button even with fileName. */
 	download?: boolean;
 	/**
-	 * true shows a "Save HTML" button (needs fileName and render): saves the
+	 * true turns the download button into a menu (Markdown / HTML; needs fileName and render) that also saves the
 	 * rendered text as a complete .html document.
 	 */
 	saveHtml?: boolean;
@@ -99,6 +101,7 @@ export interface ResolvedOptions {
 	download: boolean;
 	saveHtml: boolean;
 	shortcuts: boolean;
+	modeIcons: boolean;
 }
 
 declare function markdownPagesEditor(target: HTMLElement, options?: EditorOptions): Editor;

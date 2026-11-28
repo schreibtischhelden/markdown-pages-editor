@@ -62,15 +62,16 @@ The first argument is a container the editor is appended to, or an existing `<te
 | `afterRender` | – | `function (element, editor)`, called after the HTML was inserted – e.g. to highlight code |
 | `modes` | `['write', 'split', 'preview']` | Available modes. One mode hides the switcher. Without `render` only `'write'` is left |
 | `mode` | `'split'` | Start mode. `'split'` shows text and preview side by side (stacked on narrow screens) |
+| `modeIcons` | `true` | Mode buttons show icons (pencil, two columns, eye) with the label as tooltip and accessible name; `false` shows the label text |
 | `fileName` | – | File name for the *Download* button; without it there is no button |
 | `download` | `true` | `false` hides the download button even with a `fileName` |
-| `saveHtml` | `false` | `true` adds a *Save HTML* button (needs `fileName` and `render`), see [Saving as HTML](#saving-as-html) |
+| `saveHtml` | `false` | `true` turns *Download* into a menu button (▾) with *Markdown (.md)* and *HTML (.html)* (needs `fileName` and `render`), see [Saving as HTML](#saving-as-html) |
 | `htmlHead` | – | Extra HTML for the `<head>` of saved HTML files (string or `function (markdown, editor)`), e.g. a stylesheet link. Inserted as is |
 | `htmlLang` | the page's `<html lang>` | `lang` attribute of saved HTML files |
 | `storageKey` | – | Keeps an unsaved draft in `localStorage` under this key, so a reload does not lose it |
 | `delay` | `200` | Milliseconds between typing and the preview update |
 | `prefixIds` | `true` | Prefixes ids in the preview (`markdown-pages-editor-1-…`, also `for` and `#` links), so preview headings never clash with ids of the page |
-| `labels` | English | Button texts and accessible names, e.g. `{ bold: 'Fett', preview: 'Vorschau', download: 'Herunterladen', saveHtml: 'Als HTML speichern' }` – all keys: `markdownPagesEditor.labels` |
+| `labels` | English | Button texts and accessible names, e.g. `{ bold: 'Fett', preview: 'Vorschau', download: 'Herunterladen', downloadHtml: 'HTML-Seite (.html)' }` – all keys: `markdownPagesEditor.labels` |
 | `onChange` | – | `function (value, editor)`, called after every change |
 
 ### Built-in commands
@@ -146,7 +147,7 @@ After every preview update a `markdown-pages-editor:preview` event bubbles from 
 
 ## Saving as HTML
 
-With `saveHtml: true` (plus `fileName` and `render`) a *Save HTML* button saves the rendered page as a standalone file; `editor.saveHtml()` does the same without the button.
+With `saveHtml: true` (plus `fileName` and `render`) the *Download* button gets an arrow (▾) and opens a menu with *Markdown (.md)* and *HTML (.html)*; the HTML entry saves the rendered page as a standalone file. `editor.saveHtml()` does the same without the button. With `download: false` the button saves HTML directly, without a menu.
 
 ```javascript
 markdownPagesEditor(element, {
@@ -154,7 +155,7 @@ markdownPagesEditor(element, {
 	render: (markdown) => DOMPurify.sanitize(converter.makeHtml(markdown)),
 	saveHtml: true,
 	htmlHead: '<link rel="stylesheet" href="https://example.com/site.css">',
-	labels: { saveHtml: 'Als HTML speichern' },
+	labels: { download: 'Herunterladen', downloadMarkdown: 'Markdown (.md)', downloadHtml: 'HTML-Seite (.html)' },
 });
 ```
 
@@ -162,6 +163,7 @@ markdownPagesEditor(element, {
 - The document gets `<!doctype html>`, `charset` and `viewport`, a `<title>` from the first level 1 heading (or the file name) and `lang` from the page. No CSS is inlined; add a stylesheet with `htmlHead`.
 - The file name is `fileName` with `.md` / `.markdown` replaced by `.html` (`.html` and `.htm` are kept).
 - Without a `render` function there is no button and `saveHtml()` rejects.
+- The menu works with the keyboard: arrow keys, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Esc</kbd>.
 
 ## Preview behaviour
 
@@ -182,7 +184,7 @@ The stylesheet uses [Pico CSS](https://picocss.com) variables when they exist an
 }
 ```
 
-Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button`, `-<command>`, `-modes`, `-mode`, `-download`, `-save-html`, `-panes`, `-input`, `-preview`, `-empty`; the root has `data-mode="write|split|preview"`.
+Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button`, `-<command>`, `-modes`, `-mode`, `-icon`, `-download`, `-download-group`, `-arrow`, `-download-menu`, `-download-item`, `-panes`, `-input`, `-preview`, `-empty`; the root has `data-mode="write|split|preview"`.
 
 ## Development
 

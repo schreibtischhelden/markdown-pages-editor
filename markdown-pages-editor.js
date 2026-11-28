@@ -206,7 +206,8 @@
 		preview: 'Preview',
 		split: 'Side by side',
 		download: 'Download',
-		saveHtml: 'Save HTML',
+		downloadMarkdown: 'Markdown (.md)',
+		downloadHtml: 'HTML (.html)',
 		input:'Markdown',
 		empty: 'Nothing to preview yet.',
 	};
@@ -354,6 +355,7 @@
 			download: Boolean(options.fileName) && options.download !== false,
 			saveHtml: Boolean(options.fileName) && preview && options.saveHtml === true,
 			shortcuts: options.shortcuts !== false,
+			modeIcons: options.modeIcons !== false,
 		};
 	}
 
@@ -372,6 +374,30 @@
 			node.setAttribute(name, attributes[name]);
 		});
 		return node;
+	}
+
+	// 16x16 outline icons of the mode buttons: [tag, attributes] per shape
+	var MODE_ICONS = {
+		write: [['path', { d: 'M2.5 13.5l.8-3.2L10.8 2.8a1.4 1.4 0 0 1 2 0l.4.4a1.4 1.4 0 0 1 0 2l-7.5 7.5z' }], ['path', { d: 'M9.5 4l2.5 2.5' }]],
+		split: [['rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5' }], ['path', { d: 'M8 2.5v11' }]],
+		preview: [['path', { d: 'M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8z' }], ['circle', { cx: '8', cy: '8', r: '2' }]],
+	};
+
+	function icon(shapes) {
+		var ns = 'http://www.w3.org/2000/svg';
+		var svg = document.createElementNS(ns, 'svg');
+		var attributes = { viewBox: '0 0 16 16', width: '16', height: '16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false', 'class': 'markdown-pages-editor-icon' };
+		Object.keys(attributes).forEach(function (name) {
+			svg.setAttribute(name, attributes[name]);
+		});
+		shapes.forEach(function (shape) {
+			var node = document.createElementNS(ns, shape[0]);
+			Object.keys(shape[1]).forEach(function (name) {
+				node.setAttribute(name, shape[1][name]);
+			});
+			svg.appendChild(node);
+		});
+		return svg;
 	}
 
 	function button(className, text, label) {
@@ -486,22 +512,53 @@
 		if (config.modes.length > 1) {
 			var switcher = element('div', 'markdown-pages-editor-modes');
 			config.modes.forEach(function (name) {
-				var node = button('markdown-pages-editor-mode', labels[name]);
+				var node;
+				if (config.modeIcons) {
+					node = button('markdown-pages-editor-mode', '', labels[name]);
+					node.appendChild(icon(MODE_ICONS[name]));
+				} else {
+					node = button('markdown-pages-editor-mode', labels[name]);
+				}
 				node.setAttribute('data-mode', name);
 				modeButtons[name] = node;
 				switcher.appendChild(node);
 			});
 			toolbar.appendChild(switcher);
 		}
-		var downloadButton = null;
+		// one format: a plain button; two: a menu button with a ▾ arrow
+		var formats = [];
 		if (config.download) {
-			downloadButton = button('markdown-pages-editor-download', labels.download);
-			toolbar.appendChild(downloadButton);
+			formats.push('markdown');
 		}
-		var saveHtmlButton = null;
 		if (config.saveHtml) {
-			saveHtmlButton = button('markdown-pages-editor-download markdown-pages-editor-save-html', labels.saveHtml);
-			toolbar.appendChild(saveHtmlButton);
+			formats.push('html');
+		}
+		var downloadButton = null;
+		var downloadGroup = null;
+		var downloadMenu = null;
+		if (formats.length === 1) {
+			downloadButton = button('markdown-pages-editor-download', labels.download);
+			downloadButton.setAttribute('data-format', formats[0]);
+			toolbar.appendChild(downloadButton);
+		} else if (formats.length > 1) {
+			downloadGroup = element('div', 'markdown-pages-editor-download-group');
+			downloadButton = button('markdown-pages-editor-download', labels.download);
+			downloadButton.appendChild(element('span', 'markdown-pages-editor-arrow', { 'aria-hidden': 'true' })).textContent = '▾';
+			downloadButton.setAttribute('aria-haspopup', 'menu');
+			downloadButton.setAttribute('aria-expanded', 'false');
+			downloadButton.setAttribute('aria-controls', id + '-download-menu');
+			downloadMenu = element('div', 'markdown-pages-editor-download-menu', { role: 'menu', id: id + '-download-menu', 'aria-label': labels.download });
+			downloadMenu.hidden = true;
+			formats.forEach(function (format) {
+				var item = button('markdown-pages-editor-download-item', labels[format === 'html' ? 'downloadHtml' : 'downloadMarkdown']);
+				item.setAttribute('role', 'menuitem');
+				item.setAttribute('tabindex', '-1');
+				item.setAttribute('data-format', format);
+				downloadMenu.appendChild(item);
+			});
+			downloadGroup.appendChild(downloadButton);
+			downloadGroup.appendChild(downloadMenu);
+			toolbar.appendChild(downloadGroup);
 		}
 
 		var panes = element('div', 'markdown-pages-editor-panes');
@@ -705,12 +762,71 @@
 				exec(node.getAttribute('data-command'));
 			} else if (node.hasAttribute('data-mode')) {
 				setMode(node.getAttribute('data-mode'));
-			} else if (node === downloadButton) {
-				download();
-			} else if (node === saveHtmlButton) {
-				saveHtml().catch(function (error) {
-					console.error('markdown-pages-editor:', error);
-				});
+			} else if (node === downloadButton && downloadMenu) {
+				toggleMenu(downloadMenu.hidden);
+			} else if (node.hasAttribute('data-format')) {
+				if (downloadMenu) {
+					toggleMenu(false, true);
+				}
+				if (node.getAttribute('data-format') === 'html') {
+					saveHtml().catch(function (error) {
+						console.error('markdown-pages-editor:', error);
+					});
+				} else {
+					download();
+				}
+			}
+		}
+
+		function menuItems() {
+			return Array.prototype.slice.call(downloadMenu.querySelectorAll('[role="menuitem"]'));
+		}
+
+		/** opens or closes the download menu; focusItem: index of the item to focus, true: focus the button */
+		function toggleMenu(open, focusItem) {
+			downloadMenu.hidden = !open;
+			downloadButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+			if (open) {
+				document.addEventListener('click', onDocumentClick, true);
+				menuItems()[typeof focusItem === 'number' ? focusItem : 0].focus();
+			} else {
+				document.removeEventListener('click', onDocumentClick, true);
+				if (focusItem === true) {
+					downloadButton.focus();
+				}
+			}
+		}
+
+		function onDocumentClick(event) {
+			if (!downloadGroup.contains(event.target)) {
+				toggleMenu(false);
+			}
+		}
+
+		function onMenuKeyDown(event) {
+			var items = menuItems();
+			var index = items.indexOf(document.activeElement);
+			if (event.target === downloadButton) {
+				if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+					event.preventDefault();
+					toggleMenu(true, event.key === 'ArrowUp' ? items.length - 1 : 0);
+				} else if (event.key === 'Escape' && !downloadMenu.hidden) {
+					event.preventDefault();
+					toggleMenu(false, true);
+				}
+				return;
+			}
+			if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+				event.preventDefault();
+				items[(index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+			} else if (event.key === 'Home' || event.key === 'End') {
+				event.preventDefault();
+				items[event.key === 'Home' ? 0 : items.length - 1].focus();
+			} else if (event.key === 'Escape') {
+				event.preventDefault();
+				toggleMenu(false, true);
+			} else if (event.key === 'Tab') {
+				toggleMenu(false);
 			}
 		}
 
@@ -743,10 +859,14 @@
 		input.addEventListener('keydown', onKeyDown);
 		preview.addEventListener('click', onPreviewClick);
 		preview.addEventListener('submit', onPreviewSubmit);
+		if (downloadGroup) {
+			downloadGroup.addEventListener('keydown', onMenuKeyDown);
+		}
 
 		function destroy() {
 			clearTimeout(timer);
 			renderCount++;
+			document.removeEventListener('click', onDocumentClick, true);
 			input.removeEventListener('input', changed);
 			input.removeEventListener('keydown', onKeyDown);
 			if (isTextarea) {

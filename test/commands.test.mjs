@@ -151,7 +151,13 @@ test('resolveOptions: download button needs a file name and can be switched off'
 	assert.equal(resolveOptions({ fileName: 'a.md', download: false }).download, false);
 });
 
-test('resolveOptions: the Save HTML button is opt-in and needs a file name and a render function', () => {
+test('resolveOptions: mode buttons show icons unless modeIcons is false', () => {
+	// Act + Assert
+	assert.equal(resolveOptions({}).modeIcons, true);
+	assert.equal(resolveOptions({ modeIcons: false }).modeIcons, false);
+});
+
+test('resolveOptions: the HTML download is opt-in and needs a file name and a render function', () => {
 	// Arrange
 	const render = () => '';
 
