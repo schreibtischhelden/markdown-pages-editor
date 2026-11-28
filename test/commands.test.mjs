@@ -1,8 +1,8 @@
 // Unit tests for the pure parts of markdown-pages-editor.js: text commands,
-// option resolving and file names. The DOM part is not loaded here.
+// option resolving, file names and saved HTML documents. The DOM part is not loaded here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import markdownPagesEditor, { commands, applyEdit, safeFileName, resolveOptions, defaultToolbar, helpers } from '@schreibtischhelden/markdown-pages-editor';
+import markdownPagesEditor, { commands, applyEdit, safeFileName, documentTitle, htmlDocument, resolveOptions, defaultToolbar, helpers } from '@schreibtischhelden/markdown-pages-editor';
 
 /**
  * Runs a command on text with the selection marked by "|" (cursor) or
@@ -151,6 +151,17 @@ test('resolveOptions: download button needs a file name and can be switched off'
 	assert.equal(resolveOptions({ fileName: 'a.md', download: false }).download, false);
 });
 
+test('resolveOptions: the Save HTML button is opt-in and needs a file name and a render function', () => {
+	// Arrange
+	const render = () => '';
+
+	// Act + Assert
+	assert.equal(resolveOptions({ fileName: 'a.md', render }).saveHtml, false);
+	assert.equal(resolveOptions({ fileName: 'a.md', render, saveHtml: true }).saveHtml, true);
+	assert.equal(resolveOptions({ fileName: 'a.md', saveHtml: true }).saveHtml, false);
+	assert.equal(resolveOptions({ render, saveHtml: true }).saveHtml, false);
+});
+
 test('resolveOptions: custom commands can be added and used in the toolbar', () => {
 	// Arrange
 	const signature = { text: 'Sig', run: (state) => ({ from: state.end, to: state.end, text: '-- me', start: state.end + 5, end: state.end + 5 }) };
@@ -190,4 +201,81 @@ test('safeFileName keeps only a plain .md file name', async (t) => {
 			assert.equal(safeFileName(input), expected);
 		});
 	}
+});
+
+test('safeFileName with format html ends in .html', async (t) => {
+	const cases = [
+		['imprint.md', 'imprint.html'],
+		['notes.MARKDOWN', 'notes.html'],
+		['imprint', 'imprint.html'],
+		['page.html', 'page.html'],
+		['page.htm', 'page.htm'],
+		['pages/about.md', 'about.html'],
+		['..\..\evil.md', 'evil.html'],
+		['.hidden', 'hidden.html'],
+		['', 'document.html'],
+		[undefined, 'document.html'],
+	];
+	for (const [input, expected] of cases) {
+		await t.test(String(input), () => {
+			// Act + Assert
+			assert.equal(safeFileName(input, 'html'), expected);
+		});
+	}
+});
+
+test('documentTitle takes the first level 1 heading outside code blocks', async (t) => {
+	const cases = [
+		['# Imprint\n\ntext', 'Imprint'],
+		['intro\n\n## Sub\n\n#  Main title  ##\n', 'Main title'],
+		['Setext title\n===\n\ntext', 'Setext title'],
+		['```\n# not a title\n```\n# Real', 'Real'],
+		['~~~~\n```\n# still code\n~~~~\n# After', 'After'],
+		['# **Bold** and [link](https://example.com) `code`', 'Bold and link code'],
+		['#hashtag\n\n## Only h2', ''],
+		['#\n\n# Second', 'Second'],
+		['', ''],
+	];
+	for (const [input, expected] of cases) {
+		await t.test(JSON.stringify(input), () => {
+			// Act + Assert
+			assert.equal(documentTitle(input), expected);
+		});
+	}
+});
+
+test('htmlDocument wraps the body in a complete document', () => {
+	// Act
+	const html = htmlDocument('<h1>A &amp; B</h1>\n', { title: 'A & <B>', lang: 'de', head: '<link rel="stylesheet" href="site.css">' });
+
+	// Assert
+	assert.equal(html, [
+		'<!doctype html>',
+		'<html lang="de">',
+		'<head>',
+		'<meta charset="utf-8">',
+		'<meta name="viewport" content="width=device-width, initial-scale=1">',
+		'<title>A &amp; &lt;B&gt;</title>',
+		'<link rel="stylesheet" href="site.css">',
+		'</head>',
+		'<body>',
+		'<h1>A &amp; B</h1>',
+		'</body>',
+		'</html>',
+		'',
+	].join('\n'));
+});
+
+test('htmlDocument without options has a default title, no lang and no extra head', () => {
+	// Act
+	const html = htmlDocument('<p>x</p>');
+
+	// Assert
+	assert.match(html, /^<!doctype html>\n<html>\n/);
+	assert.match(html, /<title>Document<\/title>\n<\/head>/);
+});
+
+test('htmlDocument keeps only valid characters of lang', () => {
+	// Act + Assert
+	assert.match(htmlDocument('', { lang: 'de" onload="x' }), /<html lang="deonloadx">/);
 });

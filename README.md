@@ -7,7 +7,7 @@ A lightweight, configurable Markdown editor for the browser: a `<textarea>` with
 - **No dependencies, no build step** – one script and one stylesheet, plain ES5 UMD, works under a strict Content Security Policy (`script-src 'self'`)
 - **Your renderer** – the editor does not convert Markdown itself. The preview uses the function you pass (Showdown, marked, markdown-it … plus a sanitizer), so it looks exactly like your site
 - **Configurable** – choose the buttons and their order, add your own commands, pick the modes (write / side by side / preview), translate all texts
-- **Nothing is sent anywhere** – download the text as `.md`, keep a draft in `localStorage`, or read it with `getValue()`
+- **Nothing is sent anywhere** – download the text as `.md` or the rendered page as `.html`, keep a draft in `localStorage`, or read it with `getValue()`
 - Keeps the browser's undo history, keyboard shortcuts, accessible toolbar
 
 Used by [markdown-pages.js](https://github.com/schreibtischhelden/markdown-pages.js).
@@ -64,10 +64,13 @@ The first argument is a container the editor is appended to, or an existing `<te
 | `mode` | `'split'` | Start mode. `'split'` shows text and preview side by side (stacked on narrow screens) |
 | `fileName` | – | File name for the *Download* button; without it there is no button |
 | `download` | `true` | `false` hides the download button even with a `fileName` |
+| `saveHtml` | `false` | `true` adds a *Save HTML* button (needs `fileName` and `render`), see [Saving as HTML](#saving-as-html) |
+| `htmlHead` | – | Extra HTML for the `<head>` of saved HTML files (string or `function (markdown, editor)`), e.g. a stylesheet link. Inserted as is |
+| `htmlLang` | the page's `<html lang>` | `lang` attribute of saved HTML files |
 | `storageKey` | – | Keeps an unsaved draft in `localStorage` under this key, so a reload does not lose it |
 | `delay` | `200` | Milliseconds between typing and the preview update |
 | `prefixIds` | `true` | Prefixes ids in the preview (`markdown-pages-editor-1-…`, also `for` and `#` links), so preview headings never clash with ids of the page |
-| `labels` | English | Button texts and accessible names, e.g. `{ bold: 'Fett', preview: 'Vorschau', download: 'Herunterladen' }` – all keys: `markdownPagesEditor.labels` |
+| `labels` | English | Button texts and accessible names, e.g. `{ bold: 'Fett', preview: 'Vorschau', download: 'Herunterladen', saveHtml: 'Als HTML speichern' }` – all keys: `markdownPagesEditor.labels` |
 | `onChange` | – | `function (value, editor)`, called after every change |
 
 ### Built-in commands
@@ -132,6 +135,7 @@ markdownPagesEditor(element, {
 | `getValue()`, `setValue(text)` | Read or replace the text |
 | `isDirty()`, `markSaved()` | Whether the text changed since it was loaded or last marked as saved; `markSaved()` also removes the draft |
 | `download([fileName])` | Downloads the text as a `.md` file (the name is reduced to a plain file name) |
+| `saveHtml([fileName])`, `getHtml([fileName])` | Saves the rendered text as a complete `.html` file, or returns that document as a Promise of a string (see [Saving as HTML](#saving-as-html)) |
 | `setMode(mode)`, `getMode()` | Switch between the configured modes |
 | `render()` | Updates the preview now, returns a Promise |
 | `exec(command)` | Runs a command by name |
@@ -139,6 +143,25 @@ markdownPagesEditor(element, {
 | `element`, `textarea`, `preview` | The DOM elements |
 
 After every preview update a `markdown-pages-editor:preview` event bubbles from the preview element (`detail: { editor }`).
+
+## Saving as HTML
+
+With `saveHtml: true` (plus `fileName` and `render`) a *Save HTML* button saves the rendered page as a standalone file; `editor.saveHtml()` does the same without the button.
+
+```javascript
+markdownPagesEditor(element, {
+	fileName: 'imprint.md',            // saved as imprint.html
+	render: (markdown) => DOMPurify.sanitize(converter.makeHtml(markdown)),
+	saveHtml: true,
+	htmlHead: '<link rel="stylesheet" href="https://example.com/site.css">',
+	labels: { saveHtml: 'Als HTML speichern' },
+});
+```
+
+- The body is the output of `render` – the same HTML the preview shows, so sanitizing stays the job of `render`. `afterRender` and the id prefixes of the preview are not applied, so ids and `#` links stay as written.
+- The document gets `<!doctype html>`, `charset` and `viewport`, a `<title>` from the first level 1 heading (or the file name) and `lang` from the page. No CSS is inlined; add a stylesheet with `htmlHead`.
+- The file name is `fileName` with `.md` / `.markdown` replaced by `.html` (`.html` and `.htm` are kept).
+- Without a `render` function there is no button and `saveHtml()` rejects.
 
 ## Preview behaviour
 
@@ -159,7 +182,7 @@ The stylesheet uses [Pico CSS](https://picocss.com) variables when they exist an
 }
 ```
 
-Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button`, `-<command>`, `-modes`, `-mode`, `-download`, `-panes`, `-input`, `-preview`, `-empty`; the root has `data-mode="write|split|preview"`.
+Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button`, `-<command>`, `-modes`, `-mode`, `-download`, `-save-html`, `-panes`, `-input`, `-preview`, `-empty`; the root has `data-mode="write|split|preview"`.
 
 ## Development
 
@@ -167,7 +190,7 @@ Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button
 npm test
 ```
 
-The tests need no dependencies. They cover the commands, option resolving and file names; keep logic in these pure functions.
+The tests need no dependencies. They cover the commands, option resolving, file names and the saved HTML document; keep logic in these pure functions.
 
 ## Releasing
 

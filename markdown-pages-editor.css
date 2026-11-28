@@ -88,6 +88,10 @@
 	border-color: var(--markdown-pages-editor-border) !important;
 }
 
+.markdown-pages-editor-download + .markdown-pages-editor-download {
+	margin-left: -0.5rem;
+}
+
 .markdown-pages-editor-panes {
 	display: grid;
 	grid-template-columns: 1fr;

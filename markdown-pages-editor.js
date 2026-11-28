@@ -206,7 +206,8 @@
 		preview: 'Preview',
 		split: 'Side by side',
 		download: 'Download',
-		input: 'Markdown',
+		saveHtml: 'Save HTML',
+		input:'Markdown',
 		empty: 'Nothing to preview yet.',
 	};
 
@@ -215,14 +216,93 @@
 		return value.slice(0, edit.from) + edit.text + value.slice(edit.to);
 	}
 
-	/** file name for downloads: no folders, no characters that are invalid on common systems, ends in .md */
-	function safeFileName(name) {
+	/**
+	 * File name for downloads: no folders, no characters that are invalid on
+	 * common systems, ends in .md (or .markdown). With format "html" it ends
+	 * in .html (or .htm); a .md / .markdown extension is replaced.
+	 */
+	function safeFileName(name, format) {
+		var html = format === 'html';
 		var base = String(name || '').split(/[\\/]/).pop().replace(/[\u0000-\u001f<>:"|?*]+/g, '').trim();
 		base = base.replace(/^\.+/, '');
+		if (html) {
+			base = base.replace(/\.(md|markdown)$/i, '');
+		}
 		if (!base) {
-			base = 'document.md';
+			base = 'document';
+		}
+		if (html) {
+			return /\.html?$/i.test(base) ? base : base + '.html';
 		}
 		return /\.(md|markdown)$/i.test(base) ? base : base + '.md';
+	}
+
+	function escapeHtml(text) {
+		return String(text).replace(/[&<>"']/g, function (char) {
+			return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[char];
+		});
+	}
+
+	/**
+	 * Text of the first level 1 heading ("# Title" or "Title" + "===") outside
+	 * code blocks, without inline Markdown marks; "" if there is none.
+	 */
+	function documentTitle(markdown) {
+		var lines = String(markdown || '').split(/\r?\n/);
+		var fence = null;
+		for (var i = 0; i < lines.length; i++) {
+			var line = lines[i];
+			var marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+			if (fence) {
+				if (marker && marker[1].charAt(0) === fence.charAt(0) && marker[1].length >= fence.length) {
+					fence = null;
+				}
+				continue;
+			}
+			if (marker) {
+				fence = marker[1];
+				continue;
+			}
+			var text = null;
+			var atx = /^ {0,3}#(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/.exec(line);
+			if (atx) {
+				text = atx[1] || '';
+			} else if (/^ {0,3}=+[ \t]*$/.test(lines[i + 1] || '') && /\S/.test(line) && !/^( {4}|\t)/.test(line)) {
+				text = line;
+			}
+			if (text !== null) {
+				text = text
+					.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+					.replace(/(\*\*|__|\*|_|~~|`)(.+?)\1/g, '$2')
+					.replace(/\s+/g, ' ')
+					.trim();
+				if (text) {
+					return text;
+				}
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Wraps rendered HTML in a complete document. options: title, lang and
+	 * head (extra HTML for <head>, inserted as is, e.g. a stylesheet link).
+	 */
+	function htmlDocument(body, options) {
+		options = options || {};
+		var lang = String(options.lang || '').replace(/[^A-Za-z0-9-]/g, '');
+		return '<!doctype html>\n' +
+			'<html' + (lang ? ' lang="' + lang + '"' : '') + '>\n' +
+			'<head>\n' +
+			'<meta charset="utf-8">\n' +
+			'<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
+			'<title>' + escapeHtml(options.title || 'Document') + '</title>\n' +
+			(options.head ? String(options.head).replace(/\s+$/, '') + '\n' : '') +
+			'</head>\n' +
+			'<body>\n' +
+			String(body || '').replace(/\s+$/, '') + '\n' +
+			'</body>\n' +
+			'</html>\n';
 	}
 
 	/**
@@ -272,6 +352,7 @@
 			modes: modes,
 			mode: mode,
 			download: Boolean(options.fileName) && options.download !== false,
+			saveHtml: Boolean(options.fileName) && preview && options.saveHtml === true,
 			shortcuts: options.shortcuts !== false,
 		};
 	}
@@ -417,6 +498,11 @@
 			downloadButton = button('markdown-pages-editor-download', labels.download);
 			toolbar.appendChild(downloadButton);
 		}
+		var saveHtmlButton = null;
+		if (config.saveHtml) {
+			saveHtmlButton = button('markdown-pages-editor-download markdown-pages-editor-save-html', labels.saveHtml);
+			toolbar.appendChild(saveHtmlButton);
+		}
 
 		var panes = element('div', 'markdown-pages-editor-panes');
 		var preview = element('div', 'markdown-pages-editor-preview', { role: 'region', 'aria-label': labels.preview, 'aria-live': 'polite' });
@@ -462,6 +548,8 @@
 			render: renderPreview,
 			exec: exec,
 			download: download,
+			getHtml: getHtml,
+			saveHtml: saveHtml,
 			focus: function () { input.focus(); },
 			destroy: destroy,
 		};
@@ -564,14 +652,48 @@
 			input.setSelectionRange(edit.start, edit.end);
 		}
 
-		function download(name) {
-			var blob = new Blob([input.value], { type: 'text/markdown;charset=utf-8' });
+		function saveFile(content, type, fileName) {
+			var blob = new Blob([content], { type: type + ';charset=utf-8' });
 			var url = URL.createObjectURL(blob);
-			var anchor = element('a', '', { href: url, download: safeFileName(name || options.fileName) });
+			var anchor = element('a', '', { href: url, download: fileName });
 			document.body.appendChild(anchor);
 			anchor.click();
 			anchor.remove();
 			setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+		}
+
+		function download(name) {
+			saveFile(input.value, 'text/markdown', safeFileName(name || options.fileName));
+		}
+
+		/**
+		 * The text as a complete HTML document, rendered with the render
+		 * function into a detached element (afterRender and prefixIds do not
+		 * apply, so ids and links stay as written).
+		 */
+		function getHtml(name) {
+			if (typeof options.render !== 'function') {
+				return Promise.reject(new Error('markdown-pages-editor: saving HTML needs a render function'));
+			}
+			var markdown = input.value;
+			var container = element('div');
+			return Promise.resolve().then(function () {
+				return options.render(markdown, container);
+			}).then(function (html) {
+				var fileName = safeFileName(name || options.fileName, 'html');
+				var head = typeof options.htmlHead === 'function' ? options.htmlHead(markdown, api) : options.htmlHead;
+				return htmlDocument(typeof html === 'string' ? html : container.innerHTML, {
+					title: documentTitle(markdown) || fileName.replace(/\.html?$/i, ''),
+					lang: options.htmlLang !== undefined ? options.htmlLang : document.documentElement.lang,
+					head: head,
+				});
+			});
+		}
+
+		function saveHtml(name) {
+			return getHtml(name).then(function (html) {
+				saveFile(html, 'text/html', safeFileName(name || options.fileName, 'html'));
+			});
 		}
 
 		function onToolbarClick(event) {
@@ -585,6 +707,10 @@
 				setMode(node.getAttribute('data-mode'));
 			} else if (node === downloadButton) {
 				download();
+			} else if (node === saveHtmlButton) {
+				saveHtml().catch(function (error) {
+					console.error('markdown-pages-editor:', error);
+				});
 			}
 		}
 
@@ -642,6 +768,8 @@
 	markdownPagesEditor.applyEdit = applyEdit;
 	markdownPagesEditor.safeFileName = safeFileName;
 	markdownPagesEditor.prefixIds = prefixIds;
+	markdownPagesEditor.documentTitle = documentTitle;
+	markdownPagesEditor.htmlDocument = htmlDocument;
 	markdownPagesEditor.helpers = { wrap: wrap, prefixLines: prefixLines, editLines: editLines };
 	markdownPagesEditor.default = markdownPagesEditor;
 

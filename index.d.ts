@@ -52,6 +52,15 @@ export interface EditorOptions {
 	fileName?: string;
 	/** false hides the download button even with fileName. */
 	download?: boolean;
+	/**
+	 * true shows a "Save HTML" button (needs fileName and render): saves the
+	 * rendered text as a complete .html document.
+	 */
+	saveHtml?: boolean;
+	/** Extra HTML for the <head> of saved HTML documents, e.g. a stylesheet link. Inserted as is. */
+	htmlHead?: string | ((markdown: string, editor: Editor) => string);
+	/** lang attribute of saved HTML documents, default: the page's <html lang>. */
+	htmlLang?: string;
 	/** Keep an unsaved draft in localStorage under this key. */
 	storageKey?: string;
 	/** Milliseconds between typing and the preview update, default 200. */
@@ -74,6 +83,10 @@ export interface Editor {
 	render(): Promise<void>;
 	exec(command: string): void;
 	download(fileName?: string): void;
+	/** The text as a complete HTML document, rendered with render (without afterRender and id prefixes). */
+	getHtml(fileName?: string): Promise<string>;
+	/** Saves getHtml() as a .html file. */
+	saveHtml(fileName?: string): Promise<void>;
 	focus(): void;
 	destroy(): void;
 }
@@ -84,6 +97,7 @@ export interface ResolvedOptions {
 	modes: Mode[];
 	mode: Mode;
 	download: boolean;
+	saveHtml: boolean;
 	shortcuts: boolean;
 }
 
@@ -95,7 +109,9 @@ declare namespace markdownPagesEditor {
 	const defaultToolbar: string[];
 	function resolveOptions(options?: EditorOptions): ResolvedOptions;
 	function applyEdit(value: string, edit: Edit): string;
-	function safeFileName(name?: string): string;
+	function safeFileName(name?: string, format?: 'markdown' | 'html'): string;
+	function documentTitle(markdown: string): string;
+	function htmlDocument(body: string, options?: { title?: string; lang?: string; head?: string }): string;
 	function prefixIds(root: ParentNode, prefix: string): void;
 	const helpers: {
 		wrap(state: EditorState, before: string, after: string, placeholder: string): Edit;
@@ -112,4 +128,6 @@ export declare const resolveOptions: typeof markdownPagesEditor.resolveOptions;
 export declare const applyEdit: typeof markdownPagesEditor.applyEdit;
 export declare const safeFileName: typeof markdownPagesEditor.safeFileName;
 export declare const prefixIds: typeof markdownPagesEditor.prefixIds;
+export declare const documentTitle: typeof markdownPagesEditor.documentTitle;
+export declare const htmlDocument: typeof markdownPagesEditor.htmlDocument;
 export declare const helpers: typeof markdownPagesEditor.helpers;
