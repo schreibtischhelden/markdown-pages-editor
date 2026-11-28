@@ -392,16 +392,14 @@
 				continue;
 			}
 			var text = null;
-			var atx = /^ {0,3}#(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/.exec(line);
-			if (atx) {
-				text = atx[1] || '';
+			if (/^ {0,3}#([ \t]|$)/.test(line)) {
+				text = atxText(line);
 			} else if (/^ {0,3}=+[ \t]*$/.test(lines[i + 1] || '') && /\S/.test(line) && !/^( {4}|\t)/.test(line)) {
 				text = line;
 			}
 			if (text !== null) {
-				text = text
-					.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-					.replace(/(\*\*|__|\*|_|~~|`)(.+?)\1/g, '$2')
+				text = stripLinks(text)
+					.replace(/(\*\*|__|\*|_|~~|`)([^*_~`]+)\1/g, '$2')
 					.replace(/\s+/g, ' ')
 					.trim();
 				if (text) {
@@ -410,6 +408,49 @@
 			}
 		}
 		return '';
+	}
+
+	// the helpers below avoid regular expressions with nested repetition, so
+	// long lines cannot make them slow (ReDoS)
+
+	function trimEnd(text) {
+		var end = text.length;
+		while (end > 0 && /\s/.test(text.charAt(end - 1))) {
+			end--;
+		}
+		return text.slice(0, end);
+	}
+
+	/** text of an ATX heading line: without the leading "#" and an optional closing "#" sequence */
+	function atxText(line) {
+		var text = trimEnd(line.slice(line.indexOf('#') + 1));
+		var end = text.length;
+		while (end > 0 && text.charAt(end - 1) === '#') {
+			end--;
+		}
+		// closing hashes count only after a space (or if the heading is empty)
+		if (end < text.length && (end === 0 || /[ \t]/.test(text.charAt(end - 1)))) {
+			text = text.slice(0, end);
+		}
+		return text.trim();
+	}
+
+	/** "[text](url)" and "![alt](url)" become their text */
+	function stripLinks(text) {
+		var out = '';
+		var index = 0;
+		while (index < text.length) {
+			var open = text.indexOf('[', index);
+			var close = open < 0 ? -1 : text.indexOf(']', open + 1);
+			var end = close < 0 || text.charAt(close + 1) !== '(' ? -1 : text.indexOf(')', close + 2);
+			if (end < 0) {
+				return out + text.slice(index);
+			}
+			var start = open > index && text.charAt(open - 1) === '!' ? open - 1 : open;
+			out += text.slice(index, start) + text.slice(open + 1, close);
+			index = end + 1;
+		}
+		return out;
 	}
 
 	/**
@@ -425,10 +466,10 @@
 			'<meta charset="utf-8">\n' +
 			'<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
 			'<title>' + escapeHtml(options.title || 'Document') + '</title>\n' +
-			(options.head ? String(options.head).replace(/\s+$/, '') + '\n' : '') +
+			(options.head ? trimEnd(String(options.head)) + '\n' : '') +
 			'</head>\n' +
 			'<body>\n' +
-			String(body || '').replace(/\s+$/, '') + '\n' +
+			trimEnd(String(body || '')) + '\n' +
 			'</body>\n' +
 			'</html>\n';
 	}

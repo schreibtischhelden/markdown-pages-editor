@@ -362,3 +362,27 @@ test('htmlDocument keeps only valid characters of lang', () => {
 	// Act + Assert
 	assert.match(htmlDocument('', { lang: 'de" onload="x' }), /<html lang="deonloadx">/);
 });
+
+test('documentTitle and htmlDocument stay fast on long unusual input (no ReDoS)', () => {
+	// Arrange
+	const n = 100000;
+	const backslash = String.fromCharCode(92);
+
+	// Act
+	const start = Date.now();
+	documentTitle('# ' + ' '.repeat(n) + 'x');
+	documentTitle('# ' + '[]('.repeat(n));
+	documentTitle('# ' + ('[' + backslash).repeat(n));
+	documentTitle('#' + '\t'.repeat(n) + '#a');
+	htmlDocument('x' + ' '.repeat(n) + 'y', { head: 'a' + ' '.repeat(n) + 'b' });
+
+	// Assert
+	assert.ok(Date.now() - start < 1000, `took ${Date.now() - start} ms`);
+});
+
+test('documentTitle removes links, closing hashes and inline marks', () => {
+	// Act + Assert
+	assert.equal(documentTitle('# A [b](c) ![d](e) [x] ##'), 'A b d [x]');
+	assert.equal(documentTitle('# C#'), 'C#');
+	assert.equal(documentTitle('# #'), '');
+});
