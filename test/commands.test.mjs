@@ -52,6 +52,10 @@ test('inline commands wrap the selection and toggle it off again', async (t) => 
 		['italic', '[x]', '_[x]_'],
 		['italic', '_[x]_', '[x]'],
 		['strikethrough', '[x]', '~~[x]~~'],
+		['highlight', '[x]', '==[x]=='],
+		['highlight', '==[x]==', '[x]'],
+		['subscript', 'H[2]O', 'H~[2]~O'],
+		['superscript', 'x[2]', 'x^[2]^'],
 		['code', 'call [fn()] now', 'call `[fn()]` now'],
 		['code', '[a = 1\nb = 2]', '```\n[a = 1\nb = 2]\n```'],
 	];
@@ -72,6 +76,7 @@ test('line commands toggle on all selected lines', async (t) => {
 		['numbered', '[a\nb\nc]', '[1. a\n2. b\n3. c]'],
 		['numbered', '[1. a\n2. b]', '[a\nb]'],
 		['tasks', '[a\nb]', '[- [ ] a\n- [ ] b]'],
+		['definition', 'Term\n[meaning]', 'Term\n[: meaning]'],
 		// a selection that ends at the start of a line does not include that line
 		['list', '[a\n]b', '[- a]\nb'],
 		['heading', 'Ti|tle', '## Title|'],
@@ -99,6 +104,57 @@ test('rule is inserted after the current line', () => {
 	// Act + Assert
 	assert.equal(run('rule', 'te|xt\nnext'), 'text\n\n---\n|\nnext');
 	assert.equal(run('rule', '|'), '---\n|');
+});
+
+/** runs a command on plain text (no markers, so the text may contain "[") and returns the new text and selection */
+function runPlain(name, value, start, end = start) {
+	const edit = commands[name].run({ value, start, end });
+	const result = applyEdit(value, edit);
+	return { text: result, selected: result.slice(edit.start, edit.end) };
+}
+
+test('image works like link, with alt text', () => {
+	// Act + Assert
+	assert.deepEqual(runPlain('image', 'a logo b', 2, 6), { text: 'a ![logo](https://) b', selected: 'https://' });
+	assert.deepEqual(runPlain('image', 'https://example.com/a.png', 0, 25), { text: '![alt text](https://example.com/a.png)', selected: 'alt text' });
+	assert.deepEqual(runPlain('image', '', 0), { text: '![alt text](https://)', selected: 'https://' });
+});
+
+test('codeBlock fences the selected lines and removes the fences again', async (t) => {
+	const cases = [
+		['a = 1\nb = 2', 0, 11, '```\na = 1\nb = 2\n```', 'a = 1\nb = 2'],
+		['x = 1', 5, 5, '```\nx = 1\n```', 'x = 1'],
+		['text\n', 5, 5, 'text\n```\ncode\n```', 'code'],
+		['```js\ncode\n```', 0, 14, 'code', 'code'],
+	];
+	for (const [value, start, end, text, selected] of cases) {
+		await t.test(JSON.stringify(value), () => {
+			// Act + Assert
+			assert.deepEqual(runPlain('codeBlock', value, start, end), { text, selected });
+		});
+	}
+});
+
+test('table inserts a template after the current line', () => {
+	// Arrange
+	const template = '| Column 1 | Column 2 |\n| --- | --- |\n| Text | Text |\n';
+
+	// Act + Assert
+	assert.deepEqual(runPlain('table', 'text\nnext', 2), { text: 'text\n\n' + template + '\nnext', selected: 'Column 1' });
+	assert.deepEqual(runPlain('table', '', 0), { text: template, selected: 'Column 1' });
+});
+
+test('table turns selected lines into rows, split at tabs or pipes', () => {
+	// Act + Assert
+	assert.equal(runPlain('table', 'Name\tAge\nAnna\t30\nBen', 0, 18).text, '| Name | Age |\n| --- | --- |\n| Anna | 30 |\n| Ben |  |');
+	assert.equal(runPlain('table', 'a | b\nc | d', 0, 11).text, '| a | b |\n| --- | --- |\n| c | d |');
+});
+
+test('footnote adds the next free number at the cursor and the note at the end', () => {
+	// Act + Assert
+	assert.deepEqual(runPlain('footnote', 'Claim here.', 5), { text: 'Claim[^1] here.\n\n[^1]: footnote text\n', selected: 'footnote text' });
+	assert.deepEqual(runPlain('footnote', 'A[^1] and B.\n\n[^1]: one\n', 11), { text: 'A[^1] and B[^2].\n\n[^1]: one\n[^2]: footnote text\n', selected: 'footnote text' });
+	assert.deepEqual(runPlain('footnote', 'x source', 2, 8), { text: 'x [^1]\n\n[^1]: source\n', selected: 'source' });
 });
 
 test('resolveOptions: default toolbar, all modes with a render function', () => {
@@ -151,10 +207,10 @@ test('resolveOptions: download button needs a file name and can be switched off'
 	assert.equal(resolveOptions({ fileName: 'a.md', download: false }).download, false);
 });
 
-test('resolveOptions: mode buttons show icons unless modeIcons is false', () => {
+test('resolveOptions: buttons show icons unless icons is false', () => {
 	// Act + Assert
-	assert.equal(resolveOptions({}).modeIcons, true);
-	assert.equal(resolveOptions({ modeIcons: false }).modeIcons, false);
+	assert.equal(resolveOptions({}).icons, true);
+	assert.equal(resolveOptions({ icons: false }).icons, false);
 });
 
 test('resolveOptions: the HTML download is opt-in and needs a file name and a render function', () => {

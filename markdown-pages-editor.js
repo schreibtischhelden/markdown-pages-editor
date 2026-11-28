@@ -161,32 +161,149 @@
 		return { from: from, to: to, text: text, start: from + 4, end: from + 4 + body.length };
 	}
 
+	/** image: like link, with "!" and alt text */
+	function image(state) {
+		var selected = state.value.slice(state.start, state.end);
+		if (/^(https?:\/\/|\.\/|\/)\S*$/.test(selected)) {
+			return { from: state.start, to: state.end, text: '![alt text](' + selected + ')', start: state.start + 2, end: state.start + 10 };
+		}
+		var alt = selected || 'alt text';
+		var urlStart = state.start + alt.length + 4;
+		return { from: state.start, to: state.end, text: '![' + alt + '](https://)', start: urlStart, end: urlStart + 8 };
+	}
+
+	/** fenced code block around the selected lines, or removes the fences if they are already there */
+	function codeBlock(state) {
+		var range = selectedLines(state);
+		var lines = range.lines;
+		if (lines.length >= 2 && /^ {0,3}```/.test(lines[0]) && /^ {0,3}```\s*$/.test(lines[lines.length - 1])) {
+			var inner = lines.slice(1, -1).join('\n');
+			return { from: range.from, to: range.to, text: inner, start: range.from, end: range.from + inner.length };
+		}
+		var body = state.start === state.end && !lines.join('').trim() ? 'code' : lines.join('\n');
+		var text = '```\n' + body + '\n```';
+		return { from: range.from, to: range.to, text: text, start: range.from + 4, end: range.from + 4 + body.length };
+	}
+
+	/** inserts a block after the line of the cursor, separated by a blank line; selects [selectFrom, selectTo) of block */
+	function insertBlock(state, block, selectFrom, selectTo) {
+		var at = lineEnd(state.value, state.end);
+		var before = at > 0 ? (state.value.slice(lineStart(state.value, at), at).trim() ? '\n\n' : '\n') : '';
+		var text = before + block + '\n';
+		var offset = at + before.length;
+		return { from: at, to: at, text: text, start: offset + selectFrom, end: offset + selectTo };
+	}
+
 	/** horizontal rule after the line of the cursor */
 	function rule(state) {
-		var at = lineEnd(state.value, state.end);
-		var text = (at > 0 ? '\n\n' : '') + '---\n';
-		return { from: at, to: at, text: text, start: at + text.length, end: at + text.length };
+		var edit = insertBlock(state, '---', 0, 0);
+		edit.start = edit.end = edit.from + edit.text.length;
+		return edit;
 	}
 
 	/**
-	 * Built-in commands. text: visible button text, label: accessible name
-	 * (see LABELS), shortcut: key with Ctrl/Cmd.
+	 * Table. Selected lines become rows (cells split at tabs, as pasted from
+	 * a spreadsheet, or at "|"); otherwise a 2x2 template is inserted.
+	 */
+	function table(state) {
+		var range = selectedLines(state);
+		var rows = state.start === state.end ? [] : range.lines.filter(function (line) {
+			return line.trim();
+		}).map(function (line) {
+			return (line.indexOf('\t') >= 0 ? line.split('\t') : line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|')).map(function (cell) {
+				return cell.trim();
+			});
+		});
+		if (!rows.length) {
+			var template = '| Column 1 | Column 2 |\n| --- | --- |\n| Text | Text |';
+			return insertBlock(state, template, 2, 10);
+		}
+		var columns = rows.reduce(function (max, row) { return Math.max(max, row.length); }, 1);
+		var line = function (cells) {
+			var all = cells.slice();
+			while (all.length < columns) {
+				all.push('');
+			}
+			return '| ' + all.join(' | ') + ' |';
+		};
+		var separator = [];
+		while (separator.length < columns) {
+			separator.push('---');
+		}
+		var lines = [line(rows[0]), line(separator)];
+		rows.slice(1).forEach(function (row) {
+			lines.push(line(row));
+		});
+		var text = lines.join('\n');
+		return { from: range.from, to: range.to, text: text, start: range.from, end: range.from + text.length };
+	}
+
+	/** footnote reference at the cursor and the note at the end of the text, with the next free number */
+	function footnote(state) {
+		var value = state.value;
+		var number = 1;
+		while (value.indexOf('[^' + number + ']') >= 0) {
+			number++;
+		}
+		var ref = '[^' + number + ']';
+		var selected = value.slice(state.start, state.end);
+		var note = ref + ': ' + (selected || 'footnote text');
+		var tail = value.slice(state.end);
+		// right after existing notes, otherwise after a blank line
+		var notesAtEnd = /(^|\n)\[\^[^\]\n]+\]:[^\n]*\n?$/.test(value);
+		var separator = /\n\n$/.test(value) ? '' : /\n$/.test(value) ? (notesAtEnd ? '' : '\n') : (notesAtEnd ? '\n' : '\n\n');
+		// one edit from the cursor to the end keeps undo in one step
+		var text = ref + tail + separator + note + '\n';
+		var noteStart = state.start + ref.length + tail.length + separator.length + ref.length + 2;
+		return { from: state.start, to: value.length, text: text, start: noteStart, end: noteStart + (selected || 'footnote text').length };
+	}
+
+	/**
+	 * 16x16 outline icons: [tag, attributes] per shape, drawn with
+	 * stroke="currentColor". Used for the mode buttons and commands with
+	 * an icon.
+	 */
+	var ICONS = {
+		write: [['path', { d: 'M2.5 13.5l.8-3.2L10.8 2.8a1.4 1.4 0 0 1 2 0l.4.4a1.4 1.4 0 0 1 0 2l-7.5 7.5z' }], ['path', { d: 'M9.5 4l2.5 2.5' }]],
+		split: [['rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5' }], ['path', { d: 'M8 2.5v11' }]],
+		preview: [['path', { d: 'M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8z' }], ['circle', { cx: '8', cy: '8', r: '2' }]],
+		link: [['path', { d: 'M6.8 9.2a2.8 2.8 0 0 0 4 0l2.2-2.2a2.8 2.8 0 0 0-4-4l-.9.9' }], ['path', { d: 'M9.2 6.8a2.8 2.8 0 0 0-4 0L3 9a2.8 2.8 0 0 0 4 4l.9-.9' }]],
+		image: [['rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5' }], ['circle', { cx: '5.5', cy: '6', r: '1.2' }], ['path', { d: 'M14.5 10.5l-3.5-3.5-7 6.5' }]],
+		code: [['path', { d: 'M5.5 4.5L2 8l3.5 3.5' }], ['path', { d: 'M10.5 4.5L14 8l-3.5 3.5' }]],
+		codeBlock: [['rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5' }], ['path', { d: 'M6.5 6L4.5 8l2 2' }], ['path', { d: 'M9.5 6l2 2-2 2' }]],
+		table: [['rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5' }], ['path', { d: 'M1.5 6.2h13M1.5 9.8h13M8 6.2v7.3' }]],
+		tasks: [['rect', { x: '1.5', y: '2', width: '5', height: '5', rx: '1' }], ['path', { d: 'M2.8 4.5l1 1 1.7-2' }], ['rect', { x: '1.5', y: '9', width: '5', height: '5', rx: '1' }], ['path', { d: 'M9 4.5h5.5M9 11.5h5.5' }]],
+	};
+
+	/**
+	 * Built-in commands. text: visible button text, icon: shapes from ICONS
+	 * (shown instead of the text unless icons are switched off), label:
+	 * accessible name (see LABELS), shortcut: key with Ctrl/Cmd.
 	 */
 	var COMMANDS = {
 		bold: { text: 'B', shortcut: 'b', run: function (state) { return wrap(state, '**', '**', 'bold text'); } },
 		italic: { text: 'I', shortcut: 'i', run: function (state) { return wrap(state, '_', '_', 'italic text'); } },
 		strikethrough: { text: 'S', run: function (state) { return wrap(state, '~~', '~~', 'text'); } },
 		heading: { text: 'H', run: heading },
-		link: { text: 'Link', shortcut: 'k', run: link },
-		code: { text: '</>', run: code },
+		link: { text: 'Link', icon: ICONS.link, shortcut: 'k', run: link },
+		image: { text: 'Img', icon: ICONS.image, run: image },
+		code: { text: '</>', icon: ICONS.code, run: code },
+		codeBlock: { text: '{ }', icon: ICONS.codeBlock, run: codeBlock },
 		quote: { text: '“', run: function (state) { return prefixLines(state, '> '); } },
 		list: { text: '•', run: function (state) { return prefixLines(state, '- '); } },
 		numbered: { text: '1.', run: numberedList },
-		tasks: { text: '☐', run: function (state) { return prefixLines(state, '- [ ] '); } },
+		tasks: { text: '☐', icon: ICONS.tasks, run: function (state) { return prefixLines(state, '- [ ] '); } },
+		table: { text: 'Tbl', icon: ICONS.table, run: table },
 		rule: { text: '—', run: rule },
+		// extended syntax that not every renderer supports - not in the default toolbar
+		highlight: { text: 'M', run: function (state) { return wrap(state, '==', '==', 'text'); } },
+		subscript: { text: 'x₂', run: function (state) { return wrap(state, '~', '~', 'text'); } },
+		superscript: { text: 'x²', run: function (state) { return wrap(state, '^', '^', 'text'); } },
+		footnote: { text: '¹', run: footnote },
+		definition: { text: 'DL', run: function (state) { return prefixLines(state, ': '); } },
 	};
 
-	var DEFAULT_TOOLBAR = ['bold', 'italic', 'heading', '|', 'link', 'code', '|', 'quote', 'list', 'numbered'];
+	var DEFAULT_TOOLBAR = ['bold', 'italic', 'strikethrough', 'heading', '|', 'link', 'image', 'code', 'codeBlock', '|', 'quote', 'list', 'numbered', 'tasks', 'table'];
 	var MODES = ['write', 'split', 'preview'];
 
 	var LABELS = {
@@ -196,12 +313,20 @@
 		strikethrough: 'Strikethrough',
 		heading: 'Heading',
 		link: 'Link',
+		image: 'Image',
 		code: 'Code',
+		codeBlock: 'Code block',
 		quote: 'Quote',
 		list: 'Bulleted list',
 		numbered: 'Numbered list',
 		tasks: 'Task list',
+		table: 'Table',
 		rule: 'Horizontal rule',
+		highlight: 'Highlight',
+		subscript: 'Subscript',
+		superscript: 'Superscript',
+		footnote: 'Footnote',
+		definition: 'Definition',
 		write: 'Write',
 		preview: 'Preview',
 		split: 'Side by side',
@@ -355,7 +480,7 @@
 			download: Boolean(options.fileName) && options.download !== false,
 			saveHtml: Boolean(options.fileName) && preview && options.saveHtml === true,
 			shortcuts: options.shortcuts !== false,
-			modeIcons: options.modeIcons !== false,
+			icons: options.icons !== false,
 		};
 	}
 
@@ -375,13 +500,6 @@
 		});
 		return node;
 	}
-
-	// 16x16 outline icons of the mode buttons: [tag, attributes] per shape
-	var MODE_ICONS = {
-		write: [['path', { d: 'M2.5 13.5l.8-3.2L10.8 2.8a1.4 1.4 0 0 1 2 0l.4.4a1.4 1.4 0 0 1 0 2l-7.5 7.5z' }], ['path', { d: 'M9.5 4l2.5 2.5' }]],
-		split: [['rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5' }], ['path', { d: 'M8 2.5v11' }]],
-		preview: [['path', { d: 'M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8z' }], ['circle', { cx: '8', cy: '8', r: '2' }]],
-	};
 
 	function icon(shapes) {
 		var ns = 'http://www.w3.org/2000/svg';
@@ -500,7 +618,11 @@
 				return;
 			}
 			var command = config.commands[name];
-			var node = button('markdown-pages-editor-button markdown-pages-editor-' + name, command.text || labels[name], labels[name]);
+			var withIcon = config.icons && Array.isArray(command.icon);
+			var node = button('markdown-pages-editor-button markdown-pages-editor-' + name, withIcon ? '' : command.text || labels[name], labels[name]);
+			if (withIcon) {
+				node.appendChild(icon(command.icon));
+			}
 			node.setAttribute('data-command', name);
 			format.appendChild(node);
 		});
@@ -513,9 +635,9 @@
 			var switcher = element('div', 'markdown-pages-editor-modes');
 			config.modes.forEach(function (name) {
 				var node;
-				if (config.modeIcons) {
+				if (config.icons) {
 					node = button('markdown-pages-editor-mode', '', labels[name]);
-					node.appendChild(icon(MODE_ICONS[name]));
+					node.appendChild(icon(ICONS[name]));
 				} else {
 					node = button('markdown-pages-editor-mode', labels[name]);
 				}
@@ -883,6 +1005,7 @@
 
 	markdownPagesEditor.commands = COMMANDS;
 	markdownPagesEditor.labels = LABELS;
+	markdownPagesEditor.icons = ICONS;
 	markdownPagesEditor.defaultToolbar = DEFAULT_TOOLBAR;
 	markdownPagesEditor.resolveOptions = resolveOptions;
 	markdownPagesEditor.applyEdit = applyEdit;

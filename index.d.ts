@@ -16,9 +16,14 @@ export interface Edit {
 	end: number;
 }
 
+/** One SVG shape: element name and attributes, e.g. ['path', { d: 'M3 8h10' }]. */
+export type IconShape = [string, Record<string, string>];
+
 export interface Command {
 	/** Visible button text, default: the label. */
 	text?: string;
+	/** Icon shown instead of the text (unless icons: false), SVG shapes on a 16x16 grid. */
+	icon?: IconShape[];
 	/** Accessible name and tooltip. */
 	label?: string;
 	/** Key that runs the command together with Ctrl / Cmd, e.g. "b". */
@@ -35,8 +40,8 @@ export interface EditorOptions {
 	commands?: Record<string, Command>;
 	/** Keyboard shortcuts of the commands in the toolbar, default true. */
 	shortcuts?: boolean;
-	/** Mode buttons as icons (label as tooltip), default true. */
-	modeIcons?: boolean;
+	/** Mode buttons and commands with an icon show it (label as tooltip), default true. */
+	icons?: boolean;
 	/**
 	 * Renders the preview: return HTML (inserted as is - sanitize it!) or fill
 	 * the element yourself and return nothing. Without it there is no preview.
@@ -101,7 +106,7 @@ export interface ResolvedOptions {
 	download: boolean;
 	saveHtml: boolean;
 	shortcuts: boolean;
-	modeIcons: boolean;
+	icons: boolean;
 }
 
 declare function markdownPagesEditor(target: HTMLElement, options?: EditorOptions): Editor;
@@ -109,6 +114,7 @@ declare function markdownPagesEditor(target: HTMLElement, options?: EditorOption
 declare namespace markdownPagesEditor {
 	const commands: Record<string, Command>;
 	const labels: Record<string, string>;
+	const icons: Record<string, IconShape[]>;
 	const defaultToolbar: string[];
 	function resolveOptions(options?: EditorOptions): ResolvedOptions;
 	function applyEdit(value: string, edit: Edit): string;
@@ -126,6 +132,7 @@ declare namespace markdownPagesEditor {
 export default markdownPagesEditor;
 export declare const commands: typeof markdownPagesEditor.commands;
 export declare const labels: typeof markdownPagesEditor.labels;
+export declare const icons: typeof markdownPagesEditor.icons;
 export declare const defaultToolbar: typeof markdownPagesEditor.defaultToolbar;
 export declare const resolveOptions: typeof markdownPagesEditor.resolveOptions;
 export declare const applyEdit: typeof markdownPagesEditor.applyEdit;

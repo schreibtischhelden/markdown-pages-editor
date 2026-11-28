@@ -62,7 +62,7 @@ The first argument is a container the editor is appended to, or an existing `<te
 | `afterRender` | – | `function (element, editor)`, called after the HTML was inserted – e.g. to highlight code |
 | `modes` | `['write', 'split', 'preview']` | Available modes. One mode hides the switcher. Without `render` only `'write'` is left |
 | `mode` | `'split'` | Start mode. `'split'` shows text and preview side by side (stacked on narrow screens) |
-| `modeIcons` | `true` | Mode buttons show icons (pencil, two columns, eye) with the label as tooltip and accessible name; `false` shows the label text |
+| `icons` | `true` | Mode buttons and commands with an icon (link, image, code, code block, tasks, table) show an SVG icon with the label as tooltip and accessible name; `false` shows text |
 | `fileName` | – | File name for the *Download* button; without it there is no button |
 | `download` | `true` | `false` hides the download button even with a `fileName` |
 | `saveHtml` | `false` | `true` turns *Download* into a menu button (▾) with *Markdown (.md)* and *HTML (.html)* (needs `fileName` and `render`), see [Saving as HTML](#saving-as-html) |
@@ -76,21 +76,33 @@ The first argument is a container the editor is appended to, or an existing `<te
 
 ### Built-in commands
 
-| Name | Button | Result |
-| :--- | :--- | :--- |
-| `bold` | **B** | `**bold**` – again to remove (<kbd>Ctrl</kbd>+<kbd>B</kbd>) |
-| `italic` | _I_ | `_italic_` (<kbd>Ctrl</kbd>+<kbd>I</kbd>) |
-| `strikethrough` | S | `~~text~~` |
-| `heading` | H | Heading: none → `##` → `###` → none |
-| `link` | Link | `[text](https://)` with the address selected (<kbd>Ctrl</kbd>+<kbd>K</kbd>) |
-| `code` | `</>` | `` `code` ``, a fenced block if several lines are selected |
-| `quote` | “ | `> ` before every selected line – again to remove |
-| `list` | • | `- ` before every selected line |
-| `numbered` | 1. | `1. `, `2. ` … |
-| `tasks` | ☐ | `- [ ] ` before every selected line |
-| `rule` | — | `---` after the current line |
+The editor does not render Markdown itself, so what the preview shows depends on your `render` function. The commands write [basic](https://www.markdownguide.org/basic-syntax/) and [extended](https://www.markdownguide.org/extended-syntax/) syntax:
 
-`strikethrough`, `tasks` and `rule` are not in the default toolbar – add them with `toolbar`.
+| Name | Button | Result | Syntax |
+| :--- | :--- | :--- | :--- |
+| `bold` | **B** | `**bold**` – again to remove (<kbd>Ctrl</kbd>+<kbd>B</kbd>) | basic |
+| `italic` | _I_ | `_italic_` (<kbd>Ctrl</kbd>+<kbd>I</kbd>) | basic |
+| `strikethrough` | S | `~~text~~` | extended (GFM) |
+| `heading` | H | Heading: none → `##` → `###` → none | basic |
+| `link` | icon | `[text](https://)` with the address selected (<kbd>Ctrl</kbd>+<kbd>K</kbd>) | basic |
+| `image` | icon | `![alt text](https://)` | basic |
+| `code` | icon | `` `code` ``, a fenced block if several lines are selected | basic |
+| `codeBlock` | icon | ` ``` ` fences around the selected lines – again to remove | extended (GFM) |
+| `quote` | “ | `> ` before every selected line – again to remove | basic |
+| `list` | • | `- ` before every selected line | basic |
+| `numbered` | 1. | `1. `, `2. ` … | basic |
+| `tasks` | icon | `- [ ] ` before every selected line (GitHub task list) | extended (GFM) |
+| `table` | icon | A 2×2 table template; selected lines become rows (cells split at tabs – pasted from a spreadsheet – or at `\|`) | extended (GFM) |
+| `rule` | — | `---` after the current line | basic |
+| `highlight` | M | `==text==` | extended |
+| `subscript` | x₂ | `~text~` | extended |
+| `superscript` | x² | `^text^` | extended |
+| `footnote` | ¹ | `[^1]` at the cursor and `[^1]: …` at the end, with the next free number | extended |
+| `definition` | DL | `: ` before every selected line (definition list) | extended |
+
+The default toolbar has `bold`, `italic`, `strikethrough`, `heading`, `link`, `image`, `code`, `codeBlock`, `quote`, `list`, `numbered`, `tasks` and `table` – the syntax GitHub (GFM) and Showdown with `tables`, `strikethrough` and `tasklists` render. `rule`, `highlight`, `subscript`, `superscript`, `footnote` and `definition` are available but not in the default toolbar: add them with `toolbar` if your renderer supports them (Showdown, for example, does not render highlight, sub- and superscript, footnotes or definition lists without extensions).
+
+Not covered by a button: line breaks (two spaces or a backslash at the end of a line), escaping (`\*`), emoji shortcodes (`:smile:`), custom heading ids (`### Title {#id}`) and automatic URL links – type them directly.
 
 ### Examples
 
@@ -124,6 +136,8 @@ markdownPagesEditor(element, {
 	},
 });
 ```
+
+A command can have an `icon` instead of a visible `text`: a list of SVG shapes on a 16×16 grid, drawn with `stroke="currentColor"`, e.g. `icon: [['path', { d: 'M3 8h10' }], ['circle', { cx: '8', cy: '8', r: '2' }]]`. The built-in icons are in `markdownPagesEditor.icons`.
 
 `markdownPagesEditor.helpers` has the building blocks of the built-in commands: `wrap(state, before, after, placeholder)`, `prefixLines(state, prefix)` and `editLines(state, mapLines)`.
 
