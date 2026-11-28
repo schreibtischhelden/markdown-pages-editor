@@ -2,7 +2,7 @@
 // option resolving, file names and saved HTML documents. The DOM part is not loaded here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import markdownPagesEditor, { commands, applyEdit, safeFileName, documentTitle, htmlDocument, resolveOptions, defaultToolbar, helpers } from '@schreibtischhelden/markdown-pages-editor';
+import markdownPagesEditor, { commands, applyEdit, safeFileName, documentTitle, htmlDocument, compareHtml, resolveOptions, defaultToolbar, helpers } from '@schreibtischhelden/markdown-pages-editor';
 
 /**
  * Runs a command on text with the selection marked by "|" (cursor) or
@@ -385,4 +385,106 @@ test('documentTitle removes links, closing hashes and inline marks', () => {
 	assert.equal(documentTitle('# A [b](c) ![d](e) [x] ##'), 'A b d [x]');
 	assert.equal(documentTitle('# C#'), 'C#');
 	assert.equal(documentTitle('# #'), '');
+});
+
+const page = htmlDocument('<main id="main">\n<h1>A &amp; B</h1>\n<p class="x y">Hi</p>\n<pre>a  b</pre>\n</main>', {
+	title: 'Page',
+	lang: 'de',
+	head: '<link rel="stylesheet" href="site.css">',
+});
+
+test('compareHtml: the same document is the same', () => {
+	// Act + Assert
+	assert.deepEqual(JSON.parse(JSON.stringify(compareHtml(page, page))), { same: true, differences: [] });
+});
+
+test('compareHtml ignores formatting that does not change the content', async (t) => {
+	const cases = [
+		['line endings', page.replace(/\n/g, '\r\n')],
+		['whitespace between tags', page.replace(/>\n</g, '>\n    \n<')],
+		['comments', page.replace('<h1>', '<!-- generated -->\n<h1>')],
+		['attribute order', page.replace('<link rel="stylesheet" href="site.css">', '<link href="site.css" rel="stylesheet">')],
+		['class order', page.replace('class="x y"', 'class="y  x"')],
+		['entity spelling', page.replace('A &amp; B', 'A &#38; B')],
+		['quotes and case', page.replace('<p class="x y">', "<P CLASS='x y'>").replace('</p>', '</P>')],
+		['self-closing void elements', page.replace('<meta charset="utf-8">', '<meta charset="utf-8" />')],
+	];
+	for (const [name, actual] of cases) {
+		await t.test(name, () => {
+			// Act + Assert
+			assert.equal(compareHtml(page, actual).same, true);
+		});
+	}
+});
+
+test('compareHtml reports the first difference of each part with its path', () => {
+	// Arrange
+	const actual = page.replace('Hi', 'Hallo').replace('site.css', 'other.css').replace('<title>Page', '<title>Seite').replace('lang="de"', 'lang="en"');
+
+	// Act
+	const result = compareHtml(page, actual);
+
+	// Assert
+	assert.equal(result.same, false);
+	assert.deepEqual(JSON.parse(JSON.stringify(result.differences)), [
+		{ part: 'lang', path: '', expected: 'de', actual: 'en' },
+		{ part: 'title', path: '', expected: 'Page', actual: 'Seite' },
+		{ part: 'head', path: '', expected: '<link href="site.css" rel="stylesheet">', actual: '<link href="other.css" rel="stylesheet">' },
+		{ part: 'body', path: 'main > p', expected: 'Hi', actual: 'Hallo' },
+	]);
+});
+
+test('compareHtml keeps whitespace inside pre and reports missing content', () => {
+	// Act
+	const spaces = compareHtml(page, page.replace('a  b', 'a b'));
+	const shorter = compareHtml(page, page.replace('<pre>a  b</pre>\n', ''));
+
+	// Assert
+	assert.equal(spaces.differences[0].path, 'main > pre');
+	assert.deepEqual(JSON.parse(JSON.stringify(shorter.differences)), [{ part: 'body', path: 'main', expected: '<pre>', actual: '</main>' }]);
+});
+
+test('compareHtml with select compares only that element of the body', () => {
+	// Arrange
+	const wrapped = page.replace('<main id="main">', '<header>Site</header>\n<main id="main">').replace('</main>', '</main>\n<footer>Links</footer>');
+
+	// Act + Assert
+	assert.equal(compareHtml(page, wrapped).same, false);
+	assert.equal(compareHtml(page, wrapped, { select: 'main' }).same, true);
+	assert.equal(compareHtml(page, wrapped, { select: '#main' }).same, true);
+	assert.equal(compareHtml(page, wrapped, { select: 'main#main' }).same, true);
+	assert.deepEqual(JSON.parse(JSON.stringify(compareHtml(page, '<p>x</p>', { select: 'main' }).differences.pop())), { part: 'body', path: '', expected: 'main', actual: null });
+	assert.throws(() => compareHtml(page, page, { select: 'main p' }), /unsupported selector/);
+});
+
+test('compareHtml works with fragments and broken HTML', () => {
+	// Act + Assert
+	assert.equal(compareHtml('<p>a</p>', '<p>a</p>\n').same, true);
+	assert.equal(compareHtml('<p>a < b</p>', '<p>a &lt; b</p>').same, true);
+	assert.equal(compareHtml('<p>a', '<p>a').same, true);
+	assert.equal(compareHtml('<p title="x>y">a</p>', '<p title="x&gt;y">a</p>').same, true);
+	assert.equal(compareHtml('<script>if (a<b) x()</script>', '<script>\nif (a<b) x()\n</script>').same, true);
+});
+
+test('compareHtml stays fast on long or broken input (no ReDoS)', () => {
+	// Arrange
+	const n = 100000;
+	const inputs = ['<'.repeat(n), '<a '.repeat(n), '<p title="'.repeat(n), '&#'.repeat(n), '<script>'.repeat(n), ' '.repeat(n) + 'x'];
+
+	// Act
+	const start = Date.now();
+	inputs.forEach((html) => compareHtml(html, html + 'x'));
+
+	// Assert
+	assert.ok(Date.now() - start < 2000, `took ${Date.now() - start} ms`);
+});
+
+test('compareHtml with select uses the whole body of a generated document without that element', () => {
+	// Arrange
+	const generated = htmlDocument('<h1>Title</h1>\n<p>Text</p>', { title: 'T' });
+	const file = htmlDocument('<header>Site</header>\n<main>\n<h1>Title</h1>\n<p>Text</p>\n</main>\n<footer>Links</footer>', { title: 'T' });
+
+	// Act + Assert
+	assert.equal(compareHtml(generated, file, { select: 'main' }).same, true);
+	assert.equal(compareHtml(generated, file.replace('Text', 'Edited'), { select: 'main' }).differences[0].path, 'p');
 });

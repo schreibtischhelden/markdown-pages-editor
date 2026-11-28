@@ -96,8 +96,37 @@ export interface Editor {
 	getHtml(fileName?: string): Promise<string>;
 	/** Saves getHtml() as a .html file. */
 	saveHtml(fileName?: string): Promise<void>;
+	/** Compares an HTML file with what getHtml() gives for the current text, see compareHtml. */
+	checkHtml(html: string, options?: CheckHtmlOptions): Promise<HtmlComparison>;
 	focus(): void;
 	destroy(): void;
+}
+
+/** One differing part of two HTML documents, with its first difference. */
+export interface HtmlDifference {
+	part: 'lang' | 'title' | 'head' | 'body';
+	/** Open elements where the difference is, e.g. "main > p"; "" at the top. */
+	path: string;
+	/** The differing element, text or value; null where one side has nothing. */
+	expected: string | null;
+	actual: string | null;
+}
+
+export interface HtmlComparison {
+	same: boolean;
+	differences: HtmlDifference[];
+}
+
+export interface CompareHtmlOptions {
+	/** Compare only the content of this element of the body: "tag", "#id", ".class", "tag#id" or "tag.class". */
+	select?: string;
+}
+
+export interface CheckHtmlOptions extends CompareHtmlOptions {
+	/** File name for the title fallback, default: fileName. */
+	fileName?: string;
+	/** Wraps or replaces the generated document before the comparison, e.g. with a site layout. */
+	expected?: (generated: string, markdown: string) => string | Promise<string>;
 }
 
 export interface ResolvedOptions {
@@ -124,6 +153,8 @@ declare namespace markdownPagesEditor {
 	function safeFileName(name?: string, format?: 'markdown' | 'html'): string;
 	function documentTitle(markdown: string): string;
 	function htmlDocument(body: string, options?: { title?: string; lang?: string; head?: string }): string;
+	/** Compares two HTML documents or fragments by content (whitespace, comments, attribute order do not count). */
+	function compareHtml(expected: string, actual: string, options?: CompareHtmlOptions): HtmlComparison;
 	function prefixIds(root: ParentNode, prefix: string): void;
 	const helpers: {
 		wrap(state: EditorState, before: string, after: string, placeholder: string): Edit;
@@ -143,4 +174,5 @@ export declare const safeFileName: typeof markdownPagesEditor.safeFileName;
 export declare const prefixIds: typeof markdownPagesEditor.prefixIds;
 export declare const documentTitle: typeof markdownPagesEditor.documentTitle;
 export declare const htmlDocument: typeof markdownPagesEditor.htmlDocument;
+export declare const compareHtml: typeof markdownPagesEditor.compareHtml;
 export declare const helpers: typeof markdownPagesEditor.helpers;

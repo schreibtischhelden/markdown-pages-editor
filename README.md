@@ -152,6 +152,7 @@ A command can have an `icon` instead of a visible `text`: a list of SVG shapes o
 | `isDirty()`, `markSaved()` | Whether the text changed since it was loaded or last marked as saved; `markSaved()` also removes the draft |
 | `download([fileName])` | Downloads the text as a `.md` file (the name is reduced to a plain file name) |
 | `saveHtml([fileName])`, `getHtml([fileName])` | Saves the rendered text as a complete `.html` file, or returns that document as a Promise of a string (see [Saving as HTML](#saving-as-html)) |
+| `checkHtml(html, [options])` | Compares an HTML file with what `getHtml()` gives for the current text, see [Checking an HTML file](#checking-an-html-file) |
 | `setMode(mode)`, `getMode()` | Switch between the configured modes |
 | `render()` | Updates the preview now, returns a Promise |
 | `exec(command)` | Runs a command by name |
@@ -179,6 +180,22 @@ markdownPagesEditor(element, {
 - The file name is `fileName` with `.md` / `.markdown` replaced by `.html` (`.html` and `.htm` are kept).
 - Without a `render` function there is no button and `saveHtml()` rejects.
 - The menu works with the keyboard: arrow keys, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Esc</kbd>.
+
+## Checking an HTML file
+
+Whether an `.html` file still matches its Markdown – or was edited by hand, or made from another text or with other settings – can be checked by content:
+
+```javascript
+const result = await editor.checkHtml(htmlFromDisk);
+// { same: false, differences: [{ part: 'body', path: 'main > p', expected: 'Hi', actual: 'Hallo' }] }
+```
+
+- The comparison ignores what does not change the content: line endings, whitespace between tags (kept inside `<pre>`), comments, the doctype, attribute and class order, quotes, upper and lower case of tags, and how characters are written (`&amp;` / `&#38;`).
+- `differences` has one entry per differing part – `lang`, `title`, `head` (the other `<head>` elements), `body` – with the first difference in it: `path` (open elements, e.g. `main > p`) and the `expected` / `actual` element or text (shortened). Only `title` or `head` differing usually means *made with other settings* (e.g. another `htmlHead`), `body` means *other text or edited by hand*.
+- `select` compares only the content of one element of the body (`'main'`, `'#id'`, `'.class'`, `'tag#id'`, `'tag.class'`) – for pages that put the rendered text into a site layout. If the expected document has no such element (as the one from `getHtml()`), its whole body is compared with that element of the file.
+- `expected: function (generated, markdown)` wraps or replaces the generated document before the comparison (may return a Promise), e.g. to put it into the same layout. `fileName` is used for the title fallback as in `getHtml()`.
+
+`markdownPagesEditor.compareHtml(expected, actual, [{ select }])` does the same for two strings, without an editor – e.g. when the expected document is built with `htmlDocument()`. It needs no DOM and also runs in Node.js.
 
 ## Preview behaviour
 
