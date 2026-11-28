@@ -1,8 +1,8 @@
 // Unit tests for the pure parts of markdown-pages-editor.js: text commands,
-// option resolving and file names. The DOM part is not loaded here.
+// option resolving, file names and saved HTML documents. The DOM part is not loaded here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import markdownPagesEditor, { commands, applyEdit, safeFileName, resolveOptions, defaultToolbar, helpers } from '@schreibtischhelden/markdown-pages-editor';
+import markdownPagesEditor, { commands, applyEdit, safeFileName, documentTitle, htmlDocument, resolveOptions, defaultToolbar, helpers } from '@schreibtischhelden/markdown-pages-editor';
 
 /**
  * Runs a command on text with the selection marked by "|" (cursor) or
@@ -52,6 +52,10 @@ test('inline commands wrap the selection and toggle it off again', async (t) => 
 		['italic', '[x]', '_[x]_'],
 		['italic', '_[x]_', '[x]'],
 		['strikethrough', '[x]', '~~[x]~~'],
+		['highlight', '[x]', '==[x]=='],
+		['highlight', '==[x]==', '[x]'],
+		['subscript', 'H[2]O', 'H~[2]~O'],
+		['superscript', 'x[2]', 'x^[2]^'],
 		['code', 'call [fn()] now', 'call `[fn()]` now'],
 		['code', '[a = 1\nb = 2]', '```\n[a = 1\nb = 2]\n```'],
 	];
@@ -72,6 +76,7 @@ test('line commands toggle on all selected lines', async (t) => {
 		['numbered', '[a\nb\nc]', '[1. a\n2. b\n3. c]'],
 		['numbered', '[1. a\n2. b]', '[a\nb]'],
 		['tasks', '[a\nb]', '[- [ ] a\n- [ ] b]'],
+		['definition', 'Term\n[meaning]', 'Term\n[: meaning]'],
 		// a selection that ends at the start of a line does not include that line
 		['list', '[a\n]b', '[- a]\nb'],
 		['heading', 'Ti|tle', '## Title|'],
@@ -99,6 +104,57 @@ test('rule is inserted after the current line', () => {
 	// Act + Assert
 	assert.equal(run('rule', 'te|xt\nnext'), 'text\n\n---\n|\nnext');
 	assert.equal(run('rule', '|'), '---\n|');
+});
+
+/** runs a command on plain text (no markers, so the text may contain "[") and returns the new text and selection */
+function runPlain(name, value, start, end = start) {
+	const edit = commands[name].run({ value, start, end });
+	const result = applyEdit(value, edit);
+	return { text: result, selected: result.slice(edit.start, edit.end) };
+}
+
+test('image works like link, with alt text', () => {
+	// Act + Assert
+	assert.deepEqual(runPlain('image', 'a logo b', 2, 6), { text: 'a ![logo](https://) b', selected: 'https://' });
+	assert.deepEqual(runPlain('image', 'https://example.com/a.png', 0, 25), { text: '![alt text](https://example.com/a.png)', selected: 'alt text' });
+	assert.deepEqual(runPlain('image', '', 0), { text: '![alt text](https://)', selected: 'https://' });
+});
+
+test('codeBlock fences the selected lines and removes the fences again', async (t) => {
+	const cases = [
+		['a = 1\nb = 2', 0, 11, '```\na = 1\nb = 2\n```', 'a = 1\nb = 2'],
+		['x = 1', 5, 5, '```\nx = 1\n```', 'x = 1'],
+		['text\n', 5, 5, 'text\n```\ncode\n```', 'code'],
+		['```js\ncode\n```', 0, 14, 'code', 'code'],
+	];
+	for (const [value, start, end, text, selected] of cases) {
+		await t.test(JSON.stringify(value), () => {
+			// Act + Assert
+			assert.deepEqual(runPlain('codeBlock', value, start, end), { text, selected });
+		});
+	}
+});
+
+test('table inserts a template after the current line', () => {
+	// Arrange
+	const template = '| Column 1 | Column 2 |\n| --- | --- |\n| Text | Text |\n';
+
+	// Act + Assert
+	assert.deepEqual(runPlain('table', 'text\nnext', 2), { text: 'text\n\n' + template + '\nnext', selected: 'Column 1' });
+	assert.deepEqual(runPlain('table', '', 0), { text: template, selected: 'Column 1' });
+});
+
+test('table turns selected lines into rows, split at tabs or pipes', () => {
+	// Act + Assert
+	assert.equal(runPlain('table', 'Name\tAge\nAnna\t30\nBen', 0, 18).text, '| Name | Age |\n| --- | --- |\n| Anna | 30 |\n| Ben |  |');
+	assert.equal(runPlain('table', 'a | b\nc | d', 0, 11).text, '| a | b |\n| --- | --- |\n| c | d |');
+});
+
+test('footnote adds the next free number at the cursor and the note at the end', () => {
+	// Act + Assert
+	assert.deepEqual(runPlain('footnote', 'Claim here.', 5), { text: 'Claim[^1] here.\n\n[^1]: footnote text\n', selected: 'footnote text' });
+	assert.deepEqual(runPlain('footnote', 'A[^1] and B.\n\n[^1]: one\n', 11), { text: 'A[^1] and B[^2].\n\n[^1]: one\n[^2]: footnote text\n', selected: 'footnote text' });
+	assert.deepEqual(runPlain('footnote', 'x source', 2, 8), { text: 'x [^1]\n\n[^1]: source\n', selected: 'source' });
 });
 
 test('resolveOptions: default toolbar, all modes with a render function', () => {
@@ -151,6 +207,44 @@ test('resolveOptions: download button needs a file name and can be switched off'
 	assert.equal(resolveOptions({ fileName: 'a.md', download: false }).download, false);
 });
 
+test('resolveOptions: help link to the Markdown Guide, configurable, only safe addresses', async (t) => {
+	const cases = [
+		[undefined, 'https://markdownguide.offshoot.io/'],
+		['https://markdownguide.offshoot.io/hacks/', 'https://markdownguide.offshoot.io/hacks/'],
+		['?page=writing-pages', '?page=writing-pages'],
+		['/help.html', '/help.html'],
+		['help.html', 'help.html'],
+		[false, null],
+		['', null],
+		['javascript:alert(1)', null],
+		[' JavaScript:alert(1)', null],
+		['data:text/html,x', null],
+	];
+	for (const [helpUrl, expected] of cases) {
+		await t.test(String(helpUrl), () => {
+			// Act + Assert
+			assert.equal(resolveOptions({ helpUrl }).helpUrl, expected);
+		});
+	}
+});
+
+test('resolveOptions: buttons show icons unless icons is false', () => {
+	// Act + Assert
+	assert.equal(resolveOptions({}).icons, true);
+	assert.equal(resolveOptions({ icons: false }).icons, false);
+});
+
+test('resolveOptions: the HTML download is opt-in and needs a file name and a render function', () => {
+	// Arrange
+	const render = () => '';
+
+	// Act + Assert
+	assert.equal(resolveOptions({ fileName: 'a.md', render }).saveHtml, false);
+	assert.equal(resolveOptions({ fileName: 'a.md', render, saveHtml: true }).saveHtml, true);
+	assert.equal(resolveOptions({ fileName: 'a.md', saveHtml: true }).saveHtml, false);
+	assert.equal(resolveOptions({ render, saveHtml: true }).saveHtml, false);
+});
+
 test('resolveOptions: custom commands can be added and used in the toolbar', () => {
 	// Arrange
 	const signature = { text: 'Sig', run: (state) => ({ from: state.end, to: state.end, text: '-- me', start: state.end + 5, end: state.end + 5 }) };
@@ -190,4 +284,105 @@ test('safeFileName keeps only a plain .md file name', async (t) => {
 			assert.equal(safeFileName(input), expected);
 		});
 	}
+});
+
+test('safeFileName with format html ends in .html', async (t) => {
+	const cases = [
+		['imprint.md', 'imprint.html'],
+		['notes.MARKDOWN', 'notes.html'],
+		['imprint', 'imprint.html'],
+		['page.html', 'page.html'],
+		['page.htm', 'page.htm'],
+		['pages/about.md', 'about.html'],
+		['..\..\evil.md', 'evil.html'],
+		['.hidden', 'hidden.html'],
+		['', 'document.html'],
+		[undefined, 'document.html'],
+	];
+	for (const [input, expected] of cases) {
+		await t.test(String(input), () => {
+			// Act + Assert
+			assert.equal(safeFileName(input, 'html'), expected);
+		});
+	}
+});
+
+test('documentTitle takes the first level 1 heading outside code blocks', async (t) => {
+	const cases = [
+		['# Imprint\n\ntext', 'Imprint'],
+		['intro\n\n## Sub\n\n#  Main title  ##\n', 'Main title'],
+		['Setext title\n===\n\ntext', 'Setext title'],
+		['```\n# not a title\n```\n# Real', 'Real'],
+		['~~~~\n```\n# still code\n~~~~\n# After', 'After'],
+		['# **Bold** and [link](https://example.com) `code`', 'Bold and link code'],
+		['#hashtag\n\n## Only h2', ''],
+		['#\n\n# Second', 'Second'],
+		['', ''],
+	];
+	for (const [input, expected] of cases) {
+		await t.test(JSON.stringify(input), () => {
+			// Act + Assert
+			assert.equal(documentTitle(input), expected);
+		});
+	}
+});
+
+test('htmlDocument wraps the body in a complete document', () => {
+	// Act
+	const html = htmlDocument('<h1>A &amp; B</h1>\n', { title: 'A & <B>', lang: 'de', head: '<link rel="stylesheet" href="site.css">' });
+
+	// Assert
+	assert.equal(html, [
+		'<!doctype html>',
+		'<html lang="de">',
+		'<head>',
+		'<meta charset="utf-8">',
+		'<meta name="viewport" content="width=device-width, initial-scale=1">',
+		'<title>A &amp; &lt;B&gt;</title>',
+		'<link rel="stylesheet" href="site.css">',
+		'</head>',
+		'<body>',
+		'<h1>A &amp; B</h1>',
+		'</body>',
+		'</html>',
+		'',
+	].join('\n'));
+});
+
+test('htmlDocument without options has a default title, no lang and no extra head', () => {
+	// Act
+	const html = htmlDocument('<p>x</p>');
+
+	// Assert
+	assert.match(html, /^<!doctype html>\n<html>\n/);
+	assert.match(html, /<title>Document<\/title>\n<\/head>/);
+});
+
+test('htmlDocument keeps only valid characters of lang', () => {
+	// Act + Assert
+	assert.match(htmlDocument('', { lang: 'de" onload="x' }), /<html lang="deonloadx">/);
+});
+
+test('documentTitle and htmlDocument stay fast on long unusual input (no ReDoS)', () => {
+	// Arrange
+	const n = 100000;
+	const backslash = String.fromCharCode(92);
+
+	// Act
+	const start = Date.now();
+	documentTitle('# ' + ' '.repeat(n) + 'x');
+	documentTitle('# ' + '[]('.repeat(n));
+	documentTitle('# ' + ('[' + backslash).repeat(n));
+	documentTitle('#' + '\t'.repeat(n) + '#a');
+	htmlDocument('x' + ' '.repeat(n) + 'y', { head: 'a' + ' '.repeat(n) + 'b' });
+
+	// Assert
+	assert.ok(Date.now() - start < 1000, `took ${Date.now() - start} ms`);
+});
+
+test('documentTitle removes links, closing hashes and inline marks', () => {
+	// Act + Assert
+	assert.equal(documentTitle('# A [b](c) ![d](e) [x] ##'), 'A b d [x]');
+	assert.equal(documentTitle('# C#'), 'C#');
+	assert.equal(documentTitle('# #'), '');
 });

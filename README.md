@@ -7,7 +7,7 @@ A lightweight, configurable Markdown editor for the browser: a `<textarea>` with
 - **No dependencies, no build step** – one script and one stylesheet, plain ES5 UMD, works under a strict Content Security Policy (`script-src 'self'`)
 - **Your renderer** – the editor does not convert Markdown itself. The preview uses the function you pass (Showdown, marked, markdown-it … plus a sanitizer), so it looks exactly like your site
 - **Configurable** – choose the buttons and their order, add your own commands, pick the modes (write / side by side / preview), translate all texts
-- **Nothing is sent anywhere** – download the text as `.md`, keep a draft in `localStorage`, or read it with `getValue()`
+- **Nothing is sent anywhere** – download the text as `.md` or the rendered page as `.html`, keep a draft in `localStorage`, or read it with `getValue()`
 - Keeps the browser's undo history, keyboard shortcuts, accessible toolbar
 
 Used by [markdown-pages.js](https://github.com/schreibtischhelden/markdown-pages.js).
@@ -62,31 +62,48 @@ The first argument is a container the editor is appended to, or an existing `<te
 | `afterRender` | – | `function (element, editor)`, called after the HTML was inserted – e.g. to highlight code |
 | `modes` | `['write', 'split', 'preview']` | Available modes. One mode hides the switcher. Without `render` only `'write'` is left |
 | `mode` | `'split'` | Start mode. `'split'` shows text and preview side by side (stacked on narrow screens) |
+| `icons` | `true` | Mode buttons and commands with an icon (link, image, code, code block, tasks, table) show an SVG icon with the label as tooltip and accessible name; `false` shows text |
+| `helpUrl` | `'https://markdownguide.offshoot.io/'` | Address of the *Markdown help* link (question mark icon) in the toolbar, opened in a new tab. `false` hides it. Only `http(s)` and relative addresses are used |
 | `fileName` | – | File name for the *Download* button; without it there is no button |
 | `download` | `true` | `false` hides the download button even with a `fileName` |
+| `saveHtml` | `false` | `true` turns *Download* into a menu button (▾) with *Markdown (.md)* and *HTML (.html)* (needs `fileName` and `render`), see [Saving as HTML](#saving-as-html) |
+| `htmlHead` | – | Extra HTML for the `<head>` of saved HTML files (string or `function (markdown, editor)`), e.g. a stylesheet link. Inserted as is |
+| `htmlLang` | the page's `<html lang>` | `lang` attribute of saved HTML files |
 | `storageKey` | – | Keeps an unsaved draft in `localStorage` under this key, so a reload does not lose it |
 | `delay` | `200` | Milliseconds between typing and the preview update |
 | `prefixIds` | `true` | Prefixes ids in the preview (`markdown-pages-editor-1-…`, also `for` and `#` links), so preview headings never clash with ids of the page |
-| `labels` | English | Button texts and accessible names, e.g. `{ bold: 'Fett', preview: 'Vorschau', download: 'Herunterladen' }` – all keys: `markdownPagesEditor.labels` |
+| `labels` | English | Button texts and accessible names, e.g. `{ bold: 'Fett', preview: 'Vorschau', download: 'Herunterladen', downloadHtml: 'HTML-Seite (.html)' }` – all keys: `markdownPagesEditor.labels` |
 | `onChange` | – | `function (value, editor)`, called after every change |
 
 ### Built-in commands
 
-| Name | Button | Result |
-| :--- | :--- | :--- |
-| `bold` | **B** | `**bold**` – again to remove (<kbd>Ctrl</kbd>+<kbd>B</kbd>) |
-| `italic` | _I_ | `_italic_` (<kbd>Ctrl</kbd>+<kbd>I</kbd>) |
-| `strikethrough` | S | `~~text~~` |
-| `heading` | H | Heading: none → `##` → `###` → none |
-| `link` | Link | `[text](https://)` with the address selected (<kbd>Ctrl</kbd>+<kbd>K</kbd>) |
-| `code` | `</>` | `` `code` ``, a fenced block if several lines are selected |
-| `quote` | “ | `> ` before every selected line – again to remove |
-| `list` | • | `- ` before every selected line |
-| `numbered` | 1. | `1. `, `2. ` … |
-| `tasks` | ☐ | `- [ ] ` before every selected line |
-| `rule` | — | `---` after the current line |
+The editor does not render Markdown itself, so what the preview shows depends on your `render` function. The commands write [basic](https://markdownguide.offshoot.io/basic-syntax/) and [extended](https://markdownguide.offshoot.io/extended-syntax/) syntax:
 
-`strikethrough`, `tasks` and `rule` are not in the default toolbar – add them with `toolbar`.
+| Name | Button | Result | Syntax |
+| :--- | :--- | :--- | :--- |
+| `bold` | **B** | `**bold**` – again to remove (<kbd>Ctrl</kbd>+<kbd>B</kbd>) | basic |
+| `italic` | _I_ | `_italic_` (<kbd>Ctrl</kbd>+<kbd>I</kbd>) | basic |
+| `strikethrough` | S | `~~text~~` | extended (GFM) |
+| `heading` | H | Heading: none → `##` → `###` → none | basic |
+| `link` | icon | `[text](https://)` with the address selected (<kbd>Ctrl</kbd>+<kbd>K</kbd>) | basic |
+| `image` | icon | `![alt text](https://)` | basic |
+| `code` | icon | `` `code` ``, a fenced block if several lines are selected | basic |
+| `codeBlock` | icon | ` ``` ` fences around the selected lines – again to remove | extended (GFM) |
+| `quote` | “ | `> ` before every selected line – again to remove | basic |
+| `list` | • | `- ` before every selected line | basic |
+| `numbered` | 1. | `1. `, `2. ` … | basic |
+| `tasks` | icon | `- [ ] ` before every selected line (GitHub task list) | extended (GFM) |
+| `table` | icon | A 2×2 table template; selected lines become rows (cells split at tabs – pasted from a spreadsheet – or at `\|`) | extended (GFM) |
+| `rule` | — | `---` after the current line | basic |
+| `highlight` | M | `==text==` | extended |
+| `subscript` | x₂ | `~text~` | extended |
+| `superscript` | x² | `^text^` | extended |
+| `footnote` | ¹ | `[^1]` at the cursor and `[^1]: …` at the end, with the next free number | extended |
+| `definition` | DL | `: ` before every selected line (definition list) | extended |
+
+The default toolbar has `bold`, `italic`, `strikethrough`, `heading`, `link`, `image`, `code`, `codeBlock`, `quote`, `list`, `numbered`, `tasks` and `table` – the syntax GitHub (GFM) and Showdown with `tables`, `strikethrough` and `tasklists` render. `rule`, `highlight`, `subscript`, `superscript`, `footnote` and `definition` are available but not in the default toolbar: add them with `toolbar` if your renderer supports them (Showdown, for example, does not render highlight, sub- and superscript, footnotes or definition lists without extensions).
+
+Not covered by a button: line breaks (two spaces or a backslash at the end of a line), escaping (`\*`), emoji shortcodes (`:smile:`), custom heading ids (`### Title {#id}`) and automatic URL links – type them directly. Workarounds for what Markdown cannot do (underline, colours, captions …) are collected in the Markdown Guide's [hacks](https://markdownguide.offshoot.io/hacks/).
 
 ### Examples
 
@@ -121,6 +138,8 @@ markdownPagesEditor(element, {
 });
 ```
 
+A command can have an `icon` instead of a visible `text`: a list of SVG shapes on a 16×16 grid, drawn with `stroke="currentColor"`, e.g. `icon: [['path', { d: 'M3 8h10' }], ['circle', { cx: '8', cy: '8', r: '2' }]]`. The built-in icons are in `markdownPagesEditor.icons`.
+
 `markdownPagesEditor.helpers` has the building blocks of the built-in commands: `wrap(state, before, after, placeholder)`, `prefixLines(state, prefix)` and `editLines(state, mapLines)`.
 
 ## Methods
@@ -132,6 +151,7 @@ markdownPagesEditor(element, {
 | `getValue()`, `setValue(text)` | Read or replace the text |
 | `isDirty()`, `markSaved()` | Whether the text changed since it was loaded or last marked as saved; `markSaved()` also removes the draft |
 | `download([fileName])` | Downloads the text as a `.md` file (the name is reduced to a plain file name) |
+| `saveHtml([fileName])`, `getHtml([fileName])` | Saves the rendered text as a complete `.html` file, or returns that document as a Promise of a string (see [Saving as HTML](#saving-as-html)) |
 | `setMode(mode)`, `getMode()` | Switch between the configured modes |
 | `render()` | Updates the preview now, returns a Promise |
 | `exec(command)` | Runs a command by name |
@@ -139,6 +159,26 @@ markdownPagesEditor(element, {
 | `element`, `textarea`, `preview` | The DOM elements |
 
 After every preview update a `markdown-pages-editor:preview` event bubbles from the preview element (`detail: { editor }`).
+
+## Saving as HTML
+
+With `saveHtml: true` (plus `fileName` and `render`) the *Download* button gets an arrow (▾) and opens a menu with *Markdown (.md)* and *HTML (.html)*; the HTML entry saves the rendered page as a standalone file. `editor.saveHtml()` does the same without the button. With `download: false` the button saves HTML directly, without a menu.
+
+```javascript
+markdownPagesEditor(element, {
+	fileName: 'imprint.md',            // saved as imprint.html
+	render: (markdown) => DOMPurify.sanitize(converter.makeHtml(markdown)),
+	saveHtml: true,
+	htmlHead: '<link rel="stylesheet" href="https://example.com/site.css">',
+	labels: { download: 'Herunterladen', downloadMarkdown: 'Markdown (.md)', downloadHtml: 'HTML-Seite (.html)' },
+});
+```
+
+- The body is the output of `render` – the same HTML the preview shows, so sanitizing stays the job of `render`. `afterRender` and the id prefixes of the preview are not applied, so ids and `#` links stay as written.
+- The document gets `<!doctype html>`, `charset` and `viewport`, a `<title>` from the first level 1 heading (or the file name) and `lang` from the page. No CSS is inlined; add a stylesheet with `htmlHead`.
+- The file name is `fileName` with `.md` / `.markdown` replaced by `.html` (`.html` and `.htm` are kept).
+- Without a `render` function there is no button and `saveHtml()` rejects.
+- The menu works with the keyboard: arrow keys, <kbd>Home</kbd>, <kbd>End</kbd>, <kbd>Esc</kbd>.
 
 ## Preview behaviour
 
@@ -159,7 +199,7 @@ The stylesheet uses [Pico CSS](https://picocss.com) variables when they exist an
 }
 ```
 
-Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button`, `-<command>`, `-modes`, `-mode`, `-download`, `-panes`, `-input`, `-preview`, `-empty`; the root has `data-mode="write|split|preview"`.
+Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button`, `-<command>`, `-modes`, `-mode`, `-icon`, `-download`, `-download-group`, `-arrow`, `-download-menu`, `-download-item`, `-help`, `-panes`, `-input`, `-preview`, `-empty`; the root has `data-mode="write|split|preview"`.
 
 ## Development
 
@@ -167,7 +207,7 @@ Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button
 npm test
 ```
 
-The tests need no dependencies. They cover the commands, option resolving and file names; keep logic in these pure functions.
+The tests need no dependencies. They cover the commands, option resolving, file names and the saved HTML document; keep logic in these pure functions.
 
 ## Releasing
 
