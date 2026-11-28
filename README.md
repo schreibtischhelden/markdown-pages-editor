@@ -63,6 +63,7 @@ The first argument is a container the editor is appended to, or an existing `<te
 | `modes` | `['write', 'split', 'preview']` | Available modes. One mode hides the switcher. Without `render` only `'write'` is left |
 | `mode` | `'split'` | Start mode. `'split'` shows text and preview side by side (stacked on narrow screens) |
 | `icons` | `true` | Mode buttons and commands with an icon (link, image, code, code block, tasks, table) show an SVG icon with the label as tooltip and accessible name; `false` shows text |
+| `helpUrl` | `'https://markdownguide.offshoot.io/'` | Address of the *Markdown help* link (question mark icon) in the toolbar, opened in a new tab. `false` hides it. Only `http(s)` and relative addresses are used |
 | `fileName` | – | File name for the *Download* button; without it there is no button |
 | `download` | `true` | `false` hides the download button even with a `fileName` |
 | `saveHtml` | `false` | `true` turns *Download* into a menu button (▾) with *Markdown (.md)* and *HTML (.html)* (needs `fileName` and `render`), see [Saving as HTML](#saving-as-html) |
@@ -76,7 +77,7 @@ The first argument is a container the editor is appended to, or an existing `<te
 
 ### Built-in commands
 
-The editor does not render Markdown itself, so what the preview shows depends on your `render` function. The commands write [basic](https://www.markdownguide.org/basic-syntax/) and [extended](https://www.markdownguide.org/extended-syntax/) syntax:
+The editor does not render Markdown itself, so what the preview shows depends on your `render` function. The commands write [basic](https://markdownguide.offshoot.io/basic-syntax/) and [extended](https://markdownguide.offshoot.io/extended-syntax/) syntax:
 
 | Name | Button | Result | Syntax |
 | :--- | :--- | :--- | :--- |
@@ -102,7 +103,7 @@ The editor does not render Markdown itself, so what the preview shows depends on
 
 The default toolbar has `bold`, `italic`, `strikethrough`, `heading`, `link`, `image`, `code`, `codeBlock`, `quote`, `list`, `numbered`, `tasks` and `table` – the syntax GitHub (GFM) and Showdown with `tables`, `strikethrough` and `tasklists` render. `rule`, `highlight`, `subscript`, `superscript`, `footnote` and `definition` are available but not in the default toolbar: add them with `toolbar` if your renderer supports them (Showdown, for example, does not render highlight, sub- and superscript, footnotes or definition lists without extensions).
 
-Not covered by a button: line breaks (two spaces or a backslash at the end of a line), escaping (`\*`), emoji shortcodes (`:smile:`), custom heading ids (`### Title {#id}`) and automatic URL links – type them directly.
+Not covered by a button: line breaks (two spaces or a backslash at the end of a line), escaping (`\*`), emoji shortcodes (`:smile:`), custom heading ids (`### Title {#id}`) and automatic URL links – type them directly. Workarounds for what Markdown cannot do (underline, colours, captions …) are collected in the Markdown Guide's [hacks](https://markdownguide.offshoot.io/hacks/).
 
 ### Examples
 
@@ -198,7 +199,7 @@ The stylesheet uses [Pico CSS](https://picocss.com) variables when they exist an
 }
 ```
 
-Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button`, `-<command>`, `-modes`, `-mode`, `-icon`, `-download`, `-download-group`, `-arrow`, `-download-menu`, `-download-item`, `-panes`, `-input`, `-preview`, `-empty`; the root has `data-mode="write|split|preview"`.
+Classes: `.markdown-pages-editor`, `-toolbar`, `-format`, `-separator`, `-button`, `-<command>`, `-modes`, `-mode`, `-icon`, `-download`, `-download-group`, `-arrow`, `-download-menu`, `-download-item`, `-help`, `-panes`, `-input`, `-preview`, `-empty`; the root has `data-mode="write|split|preview"`.
 
 ## Development
 

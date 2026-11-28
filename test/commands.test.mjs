@@ -207,6 +207,27 @@ test('resolveOptions: download button needs a file name and can be switched off'
 	assert.equal(resolveOptions({ fileName: 'a.md', download: false }).download, false);
 });
 
+test('resolveOptions: help link to the Markdown Guide, configurable, only safe addresses', async (t) => {
+	const cases = [
+		[undefined, 'https://markdownguide.offshoot.io/'],
+		['https://markdownguide.offshoot.io/hacks/', 'https://markdownguide.offshoot.io/hacks/'],
+		['?page=writing-pages', '?page=writing-pages'],
+		['/help.html', '/help.html'],
+		['help.html', 'help.html'],
+		[false, null],
+		['', null],
+		['javascript:alert(1)', null],
+		[' JavaScript:alert(1)', null],
+		['data:text/html,x', null],
+	];
+	for (const [helpUrl, expected] of cases) {
+		await t.test(String(helpUrl), () => {
+			// Act + Assert
+			assert.equal(resolveOptions({ helpUrl }).helpUrl, expected);
+		});
+	}
+});
+
 test('resolveOptions: buttons show icons unless icons is false', () => {
 	// Act + Assert
 	assert.equal(resolveOptions({}).icons, true);

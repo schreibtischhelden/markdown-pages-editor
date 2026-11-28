@@ -273,6 +273,7 @@
 		codeBlock: [['rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5' }], ['path', { d: 'M6.5 6L4.5 8l2 2' }], ['path', { d: 'M9.5 6l2 2-2 2' }]],
 		table: [['rect', { x: '1.5', y: '2.5', width: '13', height: '11', rx: '1.5' }], ['path', { d: 'M1.5 6.2h13M1.5 9.8h13M8 6.2v7.3' }]],
 		tasks: [['rect', { x: '1.5', y: '2', width: '5', height: '5', rx: '1' }], ['path', { d: 'M2.8 4.5l1 1 1.7-2' }], ['rect', { x: '1.5', y: '9', width: '5', height: '5', rx: '1' }], ['path', { d: 'M9 4.5h5.5M9 11.5h5.5' }]],
+		help: [['circle', { cx: '8', cy: '8', r: '6.5' }], ['path', { d: 'M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.1v.4' }], ['path', { d: 'M8 11.6v.1' }]],
 	};
 
 	/**
@@ -335,6 +336,7 @@
 		downloadHtml: 'HTML (.html)',
 		input:'Markdown',
 		empty: 'Nothing to preview yet.',
+		help: 'Markdown help',
 	};
 
 	/** applies an edit to a plain string */
@@ -481,7 +483,16 @@
 			saveHtml: Boolean(options.fileName) && preview && options.saveHtml === true,
 			shortcuts: options.shortcuts !== false,
 			icons: options.icons !== false,
+			helpUrl: options.helpUrl === false ? null : safeHelpUrl(options.helpUrl === undefined ? HELP_URL : options.helpUrl),
 		};
+	}
+
+	var HELP_URL = 'https://markdownguide.offshoot.io/';
+
+	/** only http(s) and relative URLs, so the link can never run script */
+	function safeHelpUrl(url) {
+		url = String(url || '').trim();
+		return url && /^(https?:\/\/|\/|\.{0,2}\/|\?|#)|^[^:]*$/i.test(url) ? url : null;
 	}
 
 	// ---------------------------------------------------------------------
@@ -628,6 +639,15 @@
 		});
 		if (config.toolbar.length) {
 			toolbar.appendChild(format);
+		}
+		if (config.helpUrl) {
+			var help = element('a', 'markdown-pages-editor-help', { href: config.helpUrl, target: '_blank', rel: 'noopener noreferrer', title: labels.help, 'aria-label': labels.help });
+			if (config.icons) {
+				help.appendChild(icon(ICONS.help));
+			} else {
+				help.textContent = labels.help;
+			}
+			toolbar.appendChild(help);
 		}
 
 		var modeButtons = {};

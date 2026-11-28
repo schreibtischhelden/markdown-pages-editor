@@ -42,6 +42,8 @@ export interface EditorOptions {
 	shortcuts?: boolean;
 	/** Mode buttons and commands with an icon show it (label as tooltip), default true. */
 	icons?: boolean;
+	/** Markdown help link in the toolbar, default "https://markdownguide.offshoot.io/"; false hides it. */
+	helpUrl?: string | false;
 	/**
 	 * Renders the preview: return HTML (inserted as is - sanitize it!) or fill
 	 * the element yourself and return nothing. Without it there is no preview.
@@ -107,6 +109,7 @@ export interface ResolvedOptions {
 	saveHtml: boolean;
 	shortcuts: boolean;
 	icons: boolean;
+	helpUrl: string | null;
 }
 
 declare function markdownPagesEditor(target: HTMLElement, options?: EditorOptions): Editor;

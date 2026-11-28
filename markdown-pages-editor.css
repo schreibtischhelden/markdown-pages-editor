@@ -88,6 +88,24 @@
 	border-color: var(--markdown-pages-editor-border) !important;
 }
 
+.markdown-pages-editor-help {
+	display: inline-block;
+	padding: 0.2rem 0.4rem;
+	border: 1px solid transparent;
+	border-radius: var(--markdown-pages-editor-radius);
+	color: inherit;
+	font-size: 0.875rem;
+	line-height: 1.4;
+	text-decoration: none;
+	opacity: 0.75;
+}
+
+.markdown-pages-editor-help:hover,
+.markdown-pages-editor-help:focus-visible {
+	border-color: var(--markdown-pages-editor-border);
+	opacity: 1;
+}
+
 .markdown-pages-editor-icon {
 	display: block;
 	width: 1rem;
